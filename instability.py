@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Instability.py v2 - Network diagnostic chatbot
+Instability.py v3 - Network diagnostic and pentesting chatbot
 
 A terminal-based network diagnostic tool that provides an interactive interface
 for diagnosing and troubleshooting network connectivity issues, even during

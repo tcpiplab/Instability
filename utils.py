@@ -35,7 +35,7 @@ THINKING_COLOR = Style.DIM
 
 # ASCII Art for the welcome header
 # Load from the ASCII art file
-ASCII_HEADER_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Instability_ASCII_Header_v2.txt")
+ASCII_HEADER_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Instability_ASCII_Header_v3.txt")
 
 # Try to load the ASCII header from file, or use fallback if file not found
 try:
@@ -46,7 +46,7 @@ except FileNotFoundError:
     WELCOME_HEADER = r"""
 ╔══════════════════════════════════════════════════════════════╗
 ║                                                              ║
-║             INSTABILITY NETWORK DIAGNOSTICS v2               ║
+║             INSTABILITY NETWORK DIAGNOSTICS v3               ║
 ║                                                              ║
 ║        A terminal-based network diagnostic assistant         ║
 ║                                                              ║
