@@ -138,20 +138,26 @@ def check_dns_resolvers() -> str:
     return "\n".join(results)
 
 
-def ping_target(host: str = "8.8.8.8", target: str = None, count: int = 4) -> str:
+def ping_target(host: str = "8.8.8.8", target: str = None, arg_name: str = None, count: int = 4) -> str:
     """Ping a target host and measure response time
     
     Args:
         host: Target host to ping (default: 8.8.8.8)
         target: Alternative parameter name for host (for compatibility)
+        arg_name: Generic parameter name used by chatbot (for compatibility)
         count: Number of ping packets to send (default: 4)
     
     Returns:
         String containing ping results
     """
     try:
-        # Allow either 'host' or 'target' parameter (target takes precedence if both are provided)
-        destination = target if target is not None else host
+        # Allow multiple parameter names (precedence: arg_name > target > host)
+        if arg_name is not None:
+            destination = arg_name
+        elif target is not None:
+            destination = target
+        else:
+            destination = host
         
         # Determine command based on operating system
         if platform.system().lower() == "windows":

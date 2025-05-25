@@ -74,6 +74,10 @@ def run_startup_sequence(silent: bool = False) -> Dict[str, Any]:
     # Calculate total duration
     results["total_duration"] = time.time() - start_time
     
+    # Determine overall success status
+    phase_statuses = [phase_data.get("status", "failure") for phase_data in results["phases"].values()]
+    results["success"] = all(status in ["success", "warning"] for status in phase_statuses)
+    
     if not silent:
         print(f"\n✅ Startup sequence completed in {results['total_duration']:.2f} seconds")
         print_startup_summary(results)
