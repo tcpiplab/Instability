@@ -1,6 +1,8 @@
 # Instability Chatbot v3
 
-A proactive terminal-based network diagnostic and pentesting assistant that provides comprehensive environmental assessment, tool integration, and persistent memory for security professionals and network administrators.
+<div style="text-align:left"><img width="33%" src="images/instability_ascii_ghost_terminal_v3.0.png" /></div>
+
+An AI network troubleshooter and pentesting chatbot that runs locally via Ollama. Diagnoses network problems, understands your local and target network context, and keeps all analysis private on localhost. No 3rd party cloud services, no data leaks. Uses `phi3:14b` LLM by default but you can specify any Ollama model you have installed. Helpful to orient yourself on an unfamiliar or problematic network, and then to call pentesting tools and analyze their output.
 
 ## Overview
 
