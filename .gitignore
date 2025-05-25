@@ -2,3 +2,7 @@
 .idea/
 __pycache__/
 *.pyc
+
+# Memory files with sensitive system information
+memory/tool_inventory_cache.json
+memory/session_cache.json
