@@ -35,7 +35,7 @@ def run_startup_sequence(silent: bool = False) -> Dict[str, Any]:
         Dictionary containing results of all startup phases
     """
     if not silent:
-        print("🚀 Starting Instability v3 initialization...")
+        print("Starting Instability v3 initialization...")
     
     startup_id = f"startup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     start_time = time.time()
@@ -49,25 +49,25 @@ def run_startup_sequence(silent: bool = False) -> Dict[str, Any]:
     
     # Phase 1: Core System Verification
     if not silent:
-        print("\n📋 Phase 1: Core System Verification")
+        print("\nPhase 1: Core System Verification")
     phase1_result = run_phase1_core_system(silent)
     results["phases"]["core_system"] = phase1_result
     
     # Phase 2: Internet Connectivity Assessment
     if not silent:
-        print("\n🌐 Phase 2: Internet Connectivity Assessment")
+        print("\nPhase 2: Internet Connectivity Assessment")
     phase2_result = run_phase2_connectivity(silent)
     results["phases"]["internet_connectivity"] = phase2_result
     
     # Phase 3: Pentesting Tool Inventory
     if not silent:
-        print("\n🔧 Phase 3: Pentesting Tool Inventory")
+        print("\nPhase 3: Pentesting Tool Inventory")
     phase3_result = run_phase3_tool_inventory(silent)
     results["phases"]["tool_inventory"] = phase3_result
     
     # Phase 4: Target Scope Configuration
     if not silent:
-        print("\n🎯 Phase 4: Target Scope Configuration")
+        print("\nPhase 4: Target Scope Configuration")
     phase4_result = run_phase4_target_scope(silent)
     results["phases"]["target_scope"] = phase4_result
     
@@ -79,7 +79,7 @@ def run_startup_sequence(silent: bool = False) -> Dict[str, Any]:
     results["success"] = all(status in ["success", "warning"] for status in phase_statuses)
     
     if not silent:
-        print(f"\n✅ Startup sequence completed in {results['total_duration']:.2f} seconds")
+        print(f"\n[OK] Startup sequence completed in {results['total_duration']:.2f} seconds")
         print_startup_summary(results)
     
     return results
@@ -116,7 +116,7 @@ def run_phase1_core_system(silent: bool = False) -> Dict[str, Any]:
             "message": f"Detected {os_info['system']} {os_info['release']}"
         }
         if not silent:
-            print(f"  ✓ OS: {os_info['system']} {os_info['release']}")
+            print(f"  [OK] OS: {os_info['system']} {os_info['release']}")
     except Exception as e:
         phase_result["checks"]["os_detection"] = {
             "status": "error",
@@ -125,7 +125,7 @@ def run_phase1_core_system(silent: bool = False) -> Dict[str, Any]:
         }
         phase_result["status"] = "warning"
         if not silent:
-            print(f"  ✗ OS detection failed: {e}")
+            print(f"  [ERROR] OS detection failed: {e}")
     
     # Check 2: Ollama Connectivity
     ollama_result = check_ollama_connectivity()
@@ -133,8 +133,8 @@ def run_phase1_core_system(silent: bool = False) -> Dict[str, Any]:
     if ollama_result["status"] != "success":
         phase_result["status"] = "warning"
     if not silent:
-        status_icon = "✓" if ollama_result["status"] == "success" else "⚠"
-        print(f"  {status_icon} Ollama: {ollama_result['message']}")
+        status_text = "[OK]" if ollama_result["status"] == "success" else "[WARN]"
+        print(f"  {status_text} Ollama: {ollama_result['message']}")
     
     # Check 3: Network Interfaces
     try:
@@ -145,7 +145,7 @@ def run_phase1_core_system(silent: bool = False) -> Dict[str, Any]:
             "message": f"Found {len(interfaces)} network interfaces"
         }
         if not silent:
-            print(f"  ✓ Network interfaces: {len(interfaces)} found")
+            print(f"  [OK] Network interfaces: {len(interfaces)} found")
             for iface in interfaces[:3]:  # Show first 3
                 print(f"    - {iface['name']}: {iface['status']}")
     except Exception as e:
@@ -156,7 +156,7 @@ def run_phase1_core_system(silent: bool = False) -> Dict[str, Any]:
         }
         phase_result["status"] = "error"
         if not silent:
-            print(f"  ✗ Network interfaces failed: {e}")
+            print(f"  [ERROR] Network interfaces failed: {e}")
     
     # Check 4: Local IP Detection
     try:
@@ -167,7 +167,7 @@ def run_phase1_core_system(silent: bool = False) -> Dict[str, Any]:
             "message": f"Local IP: {local_ip}"
         }
         if not silent:
-            print(f"  ✓ Local IP: {local_ip}")
+            print(f"  [OK] Local IP: {local_ip}")
     except Exception as e:
         phase_result["checks"]["local_ip"] = {
             "status": "error",
@@ -176,7 +176,7 @@ def run_phase1_core_system(silent: bool = False) -> Dict[str, Any]:
         }
         phase_result["status"] = "warning"
         if not silent:
-            print(f"  ⚠ Local IP detection failed: {e}")
+            print(f"  [WARN] Local IP detection failed: {e}")
     
     phase_result["duration"] = time.time() - phase_start
     return phase_result
@@ -206,7 +206,7 @@ def run_phase2_connectivity(silent: bool = False) -> Dict[str, Any]:
             "message": f"External IP: {external_ip}"
         }
         if not silent:
-            print(f"  ✓ External IP: {external_ip}")
+            print(f"  [OK] External IP: {external_ip}")
     except Exception as e:
         phase_result["checks"]["external_ip"] = {
             "status": "error",
@@ -215,7 +215,7 @@ def run_phase2_connectivity(silent: bool = False) -> Dict[str, Any]:
         }
         phase_result["status"] = "warning"
         if not silent:
-            print(f"  ⚠ External IP detection failed: {e}")
+            print(f"  [WARN] External IP detection failed: {e}")
     
     # Check 2: DNS Resolution
     dns_results = test_dns_resolution()
@@ -223,8 +223,8 @@ def run_phase2_connectivity(silent: bool = False) -> Dict[str, Any]:
     if dns_results["status"] != "success":
         phase_result["status"] = "warning"
     if not silent:
-        status_icon = "✓" if dns_results["status"] == "success" else "⚠"
-        print(f"  {status_icon} DNS: {dns_results['message']}")
+        status_text = "[OK]" if dns_results["status"] == "success" else "[WARN]"
+        print(f"  {status_text} DNS: {dns_results['message']}")
     
     # Check 3: Web Connectivity
     web_results = test_web_connectivity()
@@ -232,8 +232,8 @@ def run_phase2_connectivity(silent: bool = False) -> Dict[str, Any]:
     if web_results["status"] != "success":
         phase_result["status"] = "warning"
     if not silent:
-        status_icon = "✓" if web_results["status"] == "success" else "⚠"
-        print(f"  {status_icon} Web connectivity: {web_results['message']}")
+        status_text = "[OK]" if web_results["status"] == "success" else "[WARN]"
+        print(f"  {status_text} Web connectivity: {web_results['message']}")
     
     phase_result["duration"] = time.time() - phase_start
     return phase_result
@@ -265,11 +265,11 @@ def run_phase3_tool_inventory(silent: bool = False) -> Dict[str, Any]:
         }
         
         if not silent:
-            print(f"  ✓ Tools found: {phase_result['tools_found']}")
-            print(f"  ⚠ Tools missing: {phase_result['tools_missing']}")
+            print(f"  [OK] Tools found: {phase_result['tools_found']}")
+            print(f"  [WARN] Tools missing: {phase_result['tools_missing']}")
             
             if phase_result["critical_missing"]:
-                print(f"  ⚠ Critical tools missing: {', '.join(phase_result['critical_missing'])}")
+                print(f"  [WARN] Critical tools missing: {', '.join(phase_result['critical_missing'])}")
                 phase_result["status"] = "warning"
     
     except ImportError:
@@ -282,7 +282,7 @@ def run_phase3_tool_inventory(silent: bool = False) -> Dict[str, Any]:
             "critical_missing": []
         }
         if not silent:
-            print("  ⚠ Tool inventory system not yet implemented")
+            print("  [WARN] Tool inventory system not yet implemented")
     
     phase_result["duration"] = time.time() - phase_start
     return phase_result
@@ -315,8 +315,8 @@ def run_phase4_target_scope(silent: bool = False) -> Dict[str, Any]:
         }
         
         if not silent:
-            print(f"  ✓ Target scope: {phase_result['scope_type']}")
-            print(f"  ✓ Targets defined: {phase_result['targets_defined']}")
+            print(f"  [OK] Target scope: {phase_result['scope_type']}")
+            print(f"  [OK] Targets defined: {phase_result['targets_defined']}")
     
     except ImportError:
         # Memory manager not implemented yet
@@ -328,8 +328,8 @@ def run_phase4_target_scope(silent: bool = False) -> Dict[str, Any]:
             "targets_defined": 0
         }
         if not silent:
-            print("  ⚠ Target scope system not yet implemented")
-            print("  ℹ Using default scope: local network only")
+            print("  [WARN] Target scope system not yet implemented")
+            print("  Using default scope: local network only")
     
     phase_result["duration"] = time.time() - phase_start
     return phase_result
@@ -517,13 +517,13 @@ def check_tool_inventory(silent: bool = False) -> Dict[str, Any]:
 
 def print_startup_summary(results: Dict[str, Any]) -> None:
     """Print a summary of startup check results."""
-    print("\n📊 Startup Summary:")
+    print("\nStartup Summary:")
     print(f"   Duration: {results['total_duration']:.2f}s")
     
     for phase_name, phase_data in results["phases"].items():
-        status_icon = "✅" if phase_data["status"] == "success" else "⚠️" if phase_data["status"] == "warning" else "❌"
+        status_text = "[OK]" if phase_data["status"] == "success" else "[WARN]" if phase_data["status"] == "warning" else "[ERROR]"
         phase_display = phase_name.replace("_", " ").title()
-        print(f"   {status_icon} {phase_display}: {phase_data['status']}")
+        print(f"   {status_text} {phase_display}: {phase_data['status']}")
 
 
 # Quick test function for development

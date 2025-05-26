@@ -37,7 +37,7 @@ def start_chatbot_mode(model_name=None):
         startup_results = run_startup_sequence(silent=False)
         
         if not startup_results["success"]:
-            print(f"{Fore.YELLOW}⚠ Startup checks completed with warnings. Proceeding in degraded mode.{Style.RESET_ALL}")
+            print(f"{Fore.YELLOW}[WARN] Startup checks completed with warnings. Proceeding in degraded mode.{Style.RESET_ALL}")
         
         # Start chatbot (v3 startup context integration to be added later)
         from chatbot import start_interactive_session
@@ -73,7 +73,7 @@ def run_manual_mode(tool_name=None):
                 print(f"\n{Fore.YELLOW}{category}:{Style.RESET_ALL}")
                 for tool in category_tools:
                     if tool in tools:
-                        status = "✓" if _is_tool_available(tool, tool_inventory) else "⚠"
+                        status = "[OK]" if _is_tool_available(tool, tool_inventory) else "[WARN]"
                         desc = tools[tool].get("description", "No description")
                         print(f"  {status} {Fore.GREEN}{tool}{Style.RESET_ALL}: {desc}")
             
@@ -114,15 +114,15 @@ def run_test_mode():
         
         # Overall status
         if startup_results["success"]:
-            print(f"{Fore.GREEN}✓ All systems operational - Ready for full functionality{Style.RESET_ALL}")
+            print(f"{Fore.GREEN}[OK] All systems operational - Ready for full functionality{Style.RESET_ALL}")
         else:
-            print(f"{Fore.YELLOW}⚠ Some issues detected - Limited functionality available{Style.RESET_ALL}")
+            print(f"{Fore.YELLOW}[WARN] Some issues detected - Limited functionality available{Style.RESET_ALL}")
         
         # Phase summaries
         for phase_name, phase_data in startup_results.get("phases", {}).items():
-            status_icon = "✓" if phase_data.get("success", False) else "⚠"
+            status_text = "[WARN]" if phase_data.get("success", False) else "[WARN]"
             status_color = Fore.GREEN if phase_data.get("success", False) else Fore.YELLOW
-            print(f"{status_color}{status_icon} {phase_name.replace('_', ' ').title()}: {phase_data.get('status', 'Unknown')}{Style.RESET_ALL}")
+            print(f"{status_color}{status_text} {phase_name.replace('_', ' ').title()}: {phase_data.get('status', 'Unknown')}{Style.RESET_ALL}")
         
         # Tool inventory summary
         tool_inventory = startup_results.get("phases", {}).get("tool_inventory", {})

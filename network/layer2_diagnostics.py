@@ -117,7 +117,7 @@ def check_interface_status(interface: str = None, silent: bool = False) -> Dict[
         if not silent:
             print(f"Network interfaces ({len(interfaces)} found):")
             for iface in interfaces:
-                status_icon = "🟢" if iface["status"] == "up" else "🔴"
+                status_icon = "[UP]" if iface["status"] == "up" else "[DOWN]"
                 print(f"  {status_icon} {iface['name']}: {iface['ip']} ({iface['status']})")
         
         return {

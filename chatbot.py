@@ -480,7 +480,7 @@ If you're unsure about a problem, suggest multiple possible diagnoses and how to
                     if is_network_question:
                         warning_msg = "WARNING: Network diagnostic questions should use tools for accurate data. Response may contain inaccurate information."
                         conversation.append({"role": "system", "content": warning_msg})
-                        print(f"{Fore.YELLOW}⚠️  {warning_msg}{Style.RESET_ALL}")
+                        print(f"{Fore.YELLOW}[WARN] {warning_msg}{Style.RESET_ALL}")
 
                     # No tool call, just display the response
                     conversation.append({"role": "assistant", "content": content})

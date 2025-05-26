@@ -16,6 +16,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Function-Based**: Use simple functions rather than complex class hierarchies
 - **No Heavy Frameworks**: Avoid LangChain, complex ORMs, or other heavyweight abstractions
 - **Direct Implementation**: Prefer direct library usage over abstraction layers
+- **No Emojis**: Never use decorative emojis in code, terminal output, or documentation. This is a professional pentesting tool that needs clean, scannable output during critical network diagnostics.
+- **Functional Symbols**: Use plain Unicode symbols for functional indicators:
+  - ☐ for unchecked/incomplete items
+  - ☑︎ for checked/complete items  
+  - ⚠ for warnings (plain symbol only)
+  - Use text like [OK], [FAIL], [PASS], [ERROR] for status indicators
 - **Imports**: Standard library imports first, then third-party, then local modules
 - **Typing**: Use Python type hints (from typing import List, Dict, Optional, etc.)
 - **Naming**: 
