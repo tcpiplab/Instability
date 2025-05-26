@@ -137,7 +137,7 @@ def ping_host(target: str, count: int = 4, timeout: int = 5, silent: bool = Fals
 
 ## Current Porting Status
 
-### ✅ Successfully Ported
+### ☑︎ Successfully Ported
 - **ping functionality**: `network.layer3_diagnostics.ping_host()`
 - **DNS checking**: `network.dns_diagnostics.resolve_hostname()`
 - **System info**: `network.layer2_diagnostics.get_system_info()`
@@ -146,12 +146,12 @@ def ping_host(target: str, count: int = 4, timeout: int = 5, silent: bool = Fals
 - **External IP**: `network.layer3_diagnostics.get_external_ip()`
 - **Tool detection**: `pentest.tool_detector.scan_for_tools()`
 
-### ⚠️ Partially Implemented
+### ⚠ Partially Implemented
 - **Memory system**: Stubs in place, markdown files defined but not fully functional
 - **nmap integration**: Basic wrapper exists, needs full feature implementation
 - **Chatbot tools**: v2 tools still used with compatibility layer
 
-### ❌ Missing (Referenced but not available)
+### [MISSING] Missing (Referenced but not available)
 - `check_if_external_ip_changed` - IP change monitoring
 - `resolver_check` - DNS resolver monitoring
 - `check_layer_two_network` - Advanced layer 2 analysis

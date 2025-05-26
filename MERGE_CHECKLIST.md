@@ -4,19 +4,19 @@
 The v3 architecture has been successfully implemented with core functionality working. The main integration is complete and **most critical testing has been completed successfully**.
 
 ### Progress Summary (Updated)
-- ✅ **Sections 1, 2, 4, 5**: Fully completed
-- ✅ **Section 3**: Mostly completed (2/4 tasks done)
-- 🎯 **Ready for merge**: Core functionality tested and working
-- ⚠️ **Remaining**: Minor edge case testing and cross-platform validation
+- ☑︎ **Sections 1, 2, 4, 5**: Fully completed
+- ☑︎ **Section 3**: Mostly completed (2/4 tasks done)
+- [READY] **Ready for merge**: Core functionality tested and working
+- ⚠ **Remaining**: Minor edge case testing and cross-platform validation
 
-## Completed ✅
-- ✅ Core v3 modules (startup_checks, memory_manager, tool_detector)
-- ✅ Network diagnostics suite (layer2, layer3, DNS, web connectivity)
-- ✅ First pentesting tool wrapper (nmap)
-- ✅ Main instability.py v3 integration
-- ✅ Basic chatbot compatibility (ping function fixed)
+## Completed ☑︎
+- ☑︎ Core v3 modules (startup_checks, memory_manager, tool_detector)
+- ☑︎ Network diagnostics suite (layer2, layer3, DNS, web connectivity)
+- ☑︎ First pentesting tool wrapper (nmap)
+- ☑︎ Main instability.py v3 integration
+- ☑︎ Basic chatbot compatibility (ping function fixed)
 
-## Before Merge - Critical Tasks 🔧
+## Before Merge - Critical Tasks [CRITICAL]
 
 ### 1. Comprehensive Testing
 - [x] **Test all manual mode tools** - `python instability.py manual [tool_name]`
@@ -49,13 +49,13 @@ The v3 architecture has been successfully implemented with core functionality wo
 - [x] **Startup time** - Ensure v3 startup sequence isn't too slow
 - [x] **Large network scans** - Test nmap with larger targets for performance
 
-## Known Issues to Fix 🐛
+## Known Issues to Fix [ISSUES]
 
-### Chatbot Tool Interface ✅ RESOLVED
+### Chatbot Tool Interface ☑︎ RESOLVED
 - **Issue**: Some tools may still have `arg_name` parameter mismatches
 - **Solution**: Audit and fix all tool functions like we did with `ping_target`
 - **Files**: `tools.py`, `network_diagnostics.py`
-- **Status**: ✅ Verified all tools have compatibility parameters already implemented
+- **Status**: ☑︎ Verified all tools have compatibility parameters already implemented
 
 ### Memory Directory Creation
 - **Issue**: Memory directory might not exist on fresh installs
@@ -67,7 +67,7 @@ The v3 architecture has been successfully implemented with core functionality wo
 - **Solution**: Test tool detection on various platforms and fix path issues
 - **Files**: `pentest/tool_detector.py`, `config.py`
 
-## Testing Commands 🧪
+## Testing Commands [TESTING]
 
 ```bash
 # Basic functionality
@@ -86,7 +86,7 @@ python instability.py chatbot
 # Then test: ping, dns, web checks, nmap commands
 ```
 
-## Post-Merge Enhancements 🚀
+## Post-Merge Enhancements [FUTURE]
 
 ### Phase 2 Features (Future)
 - [ ] Additional pentesting tool wrappers (nuclei, httpx, feroxbuster)
@@ -101,7 +101,7 @@ python instability.py chatbot
 - [ ] Session persistence across chatbot restarts
 - [ ] Enhanced reporting and export capabilities
 
-## Branch Management 📋
+## Branch Management [MANAGEMENT]
 
 **Current Branch**: `feature/v3-integration`
 **Target**: `main`

@@ -54,10 +54,10 @@ This file is automatically updated by the chatbot and contains current network e
 **Last checked:** 2024-01-15 10:25:00
 
 ### Connectivity Tests
-- **Google DNS (8.8.8.8):** ✓ Reachable (15ms)
-- **Cloudflare DNS (1.1.1.1):** ✓ Reachable (12ms)
-- **www.google.com:** ✓ Reachable (HTTP 200)
-- **www.github.com:** ✓ Reachable (HTTP 200)
+- **Google DNS (8.8.8.8):** [OK] Reachable (15ms)
+- **Cloudflare DNS (1.1.1.1):** [OK] Reachable (12ms)
+- **www.google.com:** [OK] Reachable (HTTP 200)
+- **www.github.com:** [OK] Reachable (HTTP 200)
 
 ## DNS Configuration
 
@@ -66,8 +66,8 @@ This file is automatically updated by the chatbot and contains current network e
 **Search Domains:** local
 
 ### DNS Test Results
-- **Forward DNS (google.com):** ✓ Working
-- **Reverse DNS (8.8.8.8):** ✓ dns.google
+- **Forward DNS (google.com):** [OK] Working
+- **Reverse DNS (8.8.8.8):** [OK] dns.google
 
 ## Network Discovery
 
@@ -155,32 +155,32 @@ This file contains user-defined pentesting targets and is manually editable.
 ## Testing Guidelines
 
 ### Allowed Activities
-- ✓ Port scanning and service enumeration
-- ✓ Vulnerability scanning with Nuclei
-- ✓ Web application discovery
-- ✓ Default credential testing
-- ✓ Network topology mapping
+- [ALLOWED] Port scanning and service enumeration
+- [ALLOWED] Vulnerability scanning with Nuclei
+- [ALLOWED] Web application discovery
+- [ALLOWED] Default credential testing
+- [ALLOWED] Network topology mapping
 
 ### Prohibited Activities
-- ✗ Exploitation of discovered vulnerabilities
-- ✗ Data exfiltration or modification
-- ✗ Denial of service attacks
-- ✗ Social engineering
-- ✗ Physical security testing
+- [PROHIBITED] Exploitation of discovered vulnerabilities
+- [PROHIBITED] Data exfiltration or modification
+- [PROHIBITED] Denial of service attacks
+- [PROHIBITED] Social engineering
+- [PROHIBITED] Physical security testing
 
 ## Tool Usage Authorization
 
 ### Passive Reconnaissance
-- ✓ nmap (TCP SYN scans only)
-- ✓ httpx for web discovery
-- ✓ DNS enumeration
-- ✓ OSINT gathering
+- [ALLOWED] nmap (TCP SYN scans only)
+- [ALLOWED] httpx for web discovery
+- [ALLOWED] DNS enumeration
+- [ALLOWED] OSINT gathering
 
 ### Active Testing
-- ✓ Nuclei vulnerability scans
-- ✓ Directory/file enumeration (feroxbuster, gobuster)
-- ⚠️ Light credential testing (hydra with small wordlists)
-- ✗ Exploitation frameworks (Metasploit, etc.)
+- [ALLOWED] Nuclei vulnerability scans
+- [ALLOWED] Directory/file enumeration (feroxbuster, gobuster)
+- ⚠ Light credential testing (hydra with small wordlists)
+- [PROHIBITED] Exploitation frameworks (Metasploit, etc.)
 
 ## Findings Summary
 

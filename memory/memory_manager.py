@@ -140,32 +140,32 @@ def create_default_target_scope() -> None:
 ## Testing Guidelines
 
 ### Allowed Activities
-- ✓ Port scanning and service enumeration
-- ✓ Vulnerability scanning with Nuclei
-- ✓ Web application discovery
-- ✓ Default credential testing
-- ✓ Network topology mapping
+- [ALLOWED] Port scanning and service enumeration
+- [ALLOWED] Vulnerability scanning with Nuclei
+- [ALLOWED] Web application discovery
+- [ALLOWED] Default credential testing
+- [ALLOWED] Network topology mapping
 
 ### Prohibited Activities
-- ✗ Exploitation of discovered vulnerabilities
-- ✗ Data exfiltration or modification
-- ✗ Denial of service attacks
-- ✗ Social engineering
-- ✗ Physical security testing
+- [PROHIBITED] Exploitation of discovered vulnerabilities
+- [PROHIBITED] Data exfiltration or modification
+- [PROHIBITED] Denial of service attacks
+- [PROHIBITED] Social engineering
+- [PROHIBITED] Physical security testing
 
 ## Tool Usage Authorization
 
 ### Passive Reconnaissance
-- ✓ nmap (TCP SYN scans only)
-- ✓ httpx for web discovery
-- ✓ DNS enumeration
-- ✓ OSINT gathering
+- [ALLOWED] nmap (TCP SYN scans only)
+- [ALLOWED] httpx for web discovery
+- [ALLOWED] DNS enumeration
+- [ALLOWED] OSINT gathering
 
 ### Active Testing
-- ✓ Nuclei vulnerability scans
-- ✓ Directory/file enumeration (feroxbuster, gobuster)
-- ⚠️ Light credential testing (hydra with small wordlists)
-- ✗ Exploitation frameworks (Metasploit, etc.)
+- [ALLOWED] Nuclei vulnerability scans
+- [ALLOWED] Directory/file enumeration (feroxbuster, gobuster)
+- ⚠ Light credential testing (hydra with small wordlists)
+- [PROHIBITED] Exploitation frameworks (Metasploit, etc.)
 
 ## Findings Summary
 
@@ -554,19 +554,19 @@ def test_memory_manager():
     
     # Test initialization
     initialize_memory_files()
-    print("✓ Memory files initialized")
+    print("[OK] Memory files initialized")
     
     # Test reading network state
     network_state = read_network_state()
-    print(f"✓ Network state loaded: {len(network_state)} sections")
+    print(f"[OK] Network state loaded: {len(network_state)} sections")
     
     # Test reading target scope
     target_scope = read_target_scope()
-    print(f"✓ Target scope loaded: {target_scope.get('scope_type', 'unknown')}")
+    print(f"[OK] Target scope loaded: {target_scope.get('scope_type', 'unknown')}")
     
     # Test session cache
     cache = load_session_cache()
-    print(f"✓ Session cache loaded")
+    print(f"[OK] Session cache loaded")
     
     return True
 

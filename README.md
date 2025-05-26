@@ -206,7 +206,7 @@ The tool will automatically be available to the chatbot, manual mode, and startu
 
 ## Current Implementation Status
 
-### ✅ Fully Functional
+### ☑︎ Fully Functional
 - **4-phase startup sequence** - Complete system assessment
 - **Manual tool execution** - All listed tools working  
 - **Chatbot integration** - v3 startup sequence integrated
@@ -216,12 +216,12 @@ The tool will automatically be available to the chatbot, manual mode, and startu
 - **Cross-platform support** - Windows, Linux, macOS compatibility
 - **Graceful degradation** - Functions without internet/Ollama
 
-### ⚠️ Partially Implemented  
+### ⚠ Partially Implemented  
 - **Memory system** - Framework in place, markdown files defined but not fully functional
 - **Target scope management** - Basic structure exists, needs full implementation
 - **Advanced pentesting features** - Some tools need expanded functionality
 
-### 📋 Planned Features
+### [PLANNED] Features
 - Additional pentesting tool wrappers (nuclei, httpx, feroxbuster full integration)
 - Enhanced memory persistence and session tracking
 - Advanced target scope and engagement management
