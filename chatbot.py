@@ -445,7 +445,7 @@ If you're unsure about a problem, suggest multiple possible diagnoses and how to
                             follow_up = ollama.chat(
                                 model=model_name,
                                 messages=conversation,
-                                options={"temperature": 0.1}
+                                options={"temperature": 0.7}
                             )
 
                             # Add and display follow-up
