@@ -81,7 +81,7 @@ def get_external_ip(timeout: int = 10, silent: bool = False) -> Dict[str, Any]:
     except ImportError:
         error_msg = "requests library not available for external IP detection"
     except Exception as e:
-        error_msg = f"Failed to get external IP: {e}"
+        error_msg = f"Failed to get external IP: {Fore.RED}{e}{Style.RESET_ALL}"
     
     execution_time = (datetime.now() - start_time).total_seconds()
     
@@ -189,7 +189,7 @@ def ping_host(target: str, count: int = 4, timeout: int = 5, silent: bool = Fals
     
     except Exception as e:
         execution_time = (datetime.now() - start_time).total_seconds()
-        error_msg = f"Ping failed: {e}"
+        error_msg = f"Ping failed: {Fore.RED}{e}{Style.RESET_ALL}"
         
         if not silent:
             print(f"Error: {error_msg}")
@@ -299,7 +299,7 @@ def traceroute_host(target: str, max_hops: int = 30, timeout: int = 30, silent: 
     
     except Exception as e:
         execution_time = (datetime.now() - start_time).total_seconds()
-        error_msg = f"Traceroute failed: {e}"
+        error_msg = f"Traceroute failed: {Fore.RED}{e}{Style.RESET_ALL}"
         
         if not silent:
             print(f"Error: {error_msg}")
@@ -382,7 +382,7 @@ def test_port_connectivity(target: str, port: int, timeout: int = 5, silent: boo
     
     except socket.gaierror as e:
         execution_time = (datetime.now() - start_time).total_seconds()
-        error_msg = f"DNS resolution failed for {target}: {e}"
+        error_msg = f"DNS resolution failed for {target}: {Fore.RED}{e}{Style.RESET_ALL}"
         
         if not silent:
             print(f"Error: {error_msg}")
@@ -405,7 +405,7 @@ def test_port_connectivity(target: str, port: int, timeout: int = 5, silent: boo
     
     except Exception as e:
         execution_time = (datetime.now() - start_time).total_seconds()
-        error_msg = f"Port connectivity test failed: {e}"
+        error_msg = f"Port connectivity test failed: {Fore.RED}{e}{Style.RESET_ALL}"
         
         if not silent:
             print(f"Error: {error_msg}")
@@ -503,7 +503,7 @@ def scan_local_network(network: str = None, timeout: int = 10, silent: bool = Fa
     
     except Exception as e:
         execution_time = (datetime.now() - start_time).total_seconds()
-        error_msg = f"Network scan failed: {e}"
+        error_msg = f"Network scan failed: {Fore.RED}{e}{Style.RESET_ALL}"
         
         if not silent:
             print(f"Error: {error_msg}")
@@ -696,7 +696,7 @@ def test_layer3_diagnostics():
             if result['parsed_data']:
                 print(f"Data keys: {list(result['parsed_data'].keys())}")
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Error: {Fore.RED}{e}{Style.RESET_ALL}")
 
 
 if __name__ == "__main__":

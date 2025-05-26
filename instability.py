@@ -73,7 +73,7 @@ def run_manual_mode(tool_name=None):
                 print(f"\n{Fore.YELLOW}{category}:{Style.RESET_ALL}")
                 for tool in category_tools:
                     if tool in tools:
-                        status = "[OK]" if _is_tool_available(tool, tool_inventory) else "[WARN]"
+                        status = f"[{Fore.GREEN}OK{Style.RESET_ALL}]" if _is_tool_available(tool, tool_inventory) else f"[{Fore.YELLOW}WARN{Style.RESET_ALL}]"
                         desc = tools[tool].get("description", "No description")
                         print(f"  {status} {Fore.GREEN}{tool}{Style.RESET_ALL}: {desc}")
             
@@ -120,7 +120,7 @@ def run_test_mode():
         
         # Phase summaries
         for phase_name, phase_data in startup_results.get("phases", {}).items():
-            status_text = "[WARN]" if phase_data.get("success", False) else "[WARN]"
+            status_text = f"[{Fore.YELLOW}WARN{Style.RESET_ALL}]" if phase_data.get("success", False) else f"[{Fore.YELLOW}WARN{Style.RESET_ALL}]"
             status_color = Fore.GREEN if phase_data.get("success", False) else Fore.YELLOW
             print(f"{status_color}{status_text} {phase_name.replace('_', ' ').title()}: {phase_data.get('status', 'Unknown')}{Style.RESET_ALL}")
         

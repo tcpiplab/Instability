@@ -252,7 +252,7 @@ def parse_tool_call(content: str) -> Tuple[Optional[str], Optional[Dict[str, Any
 
         return tool_name, args
     except Exception as e:
-        print_error(f"Error parsing tool call: {e}")
+        print_error(f"Error parsing tool call: {Fore.RED}{e}{Style.RESET_ALL}")
         return None, None
 
 
@@ -313,7 +313,7 @@ def handle_command(command: str, cache: Dict[str, Any]) -> Tuple[bool, bool]:
                 cache[tool_name] = result
                 save_cache(cache)
             except Exception as e:
-                print_error(f"Error executing tool {tool_name}: {e}")
+                print_error(f"Error executing tool {tool_name}: {Fore.RED}{e}{Style.RESET_ALL}")
             return True, False
         else:
             print_error(f"Unknown command or tool: {cmd}")
@@ -459,7 +459,7 @@ If you're unsure about a problem, suggest multiple possible diagnoses and how to
 
                         except Exception as e:
 
-                            error_msg = f"Error executing tool {tool_name}: {e}"
+                            error_msg = f"Error executing tool {tool_name}: {Fore.RED}{e}{Style.RESET_ALL}"
                             print_error(error_msg)
                             conversation.append({"role": "system", "content": error_msg})
 
@@ -496,7 +496,7 @@ If you're unsure about a problem, suggest multiple possible diagnoses and how to
                     conversation = conversation[:2] + conversation[-(MAX_CONVERSATION_LENGTH):]
 
             except Exception as e:
-                print_error(f"Error generating response: {e}")
+                print_error(f"Error generating response: {Fore.RED}{e}{Style.RESET_ALL}")
 
     except KeyboardInterrupt:
 
@@ -504,7 +504,7 @@ If you're unsure about a problem, suggest multiple possible diagnoses and how to
 
     except Exception as e:
 
-        print_error(f"Unexpected error: {e}")
+        print_error(f"Unexpected error: {Fore.RED}{e}{Style.RESET_ALL}")
 
     finally:
 

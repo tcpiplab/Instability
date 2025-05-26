@@ -16,12 +16,16 @@ import subprocess
 import socket
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
+from colorama import Fore, Style, init as colorama_init
 
 # Import configuration
 from config import (
     OLLAMA_API_URL, OLLAMA_DEFAULT_MODEL, OLLAMA_TIMEOUT,
     DNS_TEST_SERVERS, CONNECTIVITY_TEST_SITES, STARTUP_PHASES
 )
+
+# Ensure colorama is initialized for colored output
+colorama_init(autoreset=True)
 
 
 def run_startup_sequence(silent: bool = False) -> Dict[str, Any]:
@@ -79,7 +83,7 @@ def run_startup_sequence(silent: bool = False) -> Dict[str, Any]:
     results["success"] = all(status in ["success", "warning"] for status in phase_statuses)
     
     if not silent:
-        print(f"\n[OK] Startup sequence completed in {results['total_duration']:.2f} seconds")
+        print(f"\n[{Fore.GREEN}OK{Style.RESET_ALL}] Startup sequence completed in {results['total_duration']:.2f} seconds")
         print_startup_summary(results)
     
     return results
@@ -116,16 +120,16 @@ def run_phase1_core_system(silent: bool = False) -> Dict[str, Any]:
             "message": f"Detected {os_info['system']} {os_info['release']}"
         }
         if not silent:
-            print(f"  [OK] OS: {os_info['system']} {os_info['release']}")
+            print(f"  [{Fore.GREEN}OK{Style.RESET_ALL}] OS: {os_info['system']} {os_info['release']}")
     except Exception as e:
         phase_result["checks"]["os_detection"] = {
             "status": "error",
             "result": None,
-            "message": f"Failed to detect OS: {e}"
+            "message": f"Failed to detect OS: {Fore.RED}{e}{Style.RESET_ALL}"
         }
         phase_result["status"] = "warning"
         if not silent:
-            print(f"  [ERROR] OS detection failed: {e}")
+            print(f"  [{Fore.RED}ERROR{Style.RESET_ALL}] OS detection failed: {Fore.RED}{e}{Style.RESET_ALL}")
     
     # Check 2: Ollama Connectivity
     ollama_result = check_ollama_connectivity()
@@ -133,7 +137,7 @@ def run_phase1_core_system(silent: bool = False) -> Dict[str, Any]:
     if ollama_result["status"] != "success":
         phase_result["status"] = "warning"
     if not silent:
-        status_text = "[OK]" if ollama_result["status"] == "success" else "[WARN]"
+        status_text = f"[{Fore.GREEN}OK{Style.RESET_ALL}]" if ollama_result["status"] == "success" else f"[{Fore.YELLOW}WARN{Style.RESET_ALL}]"
         print(f"  {status_text} Ollama: {ollama_result['message']}")
     
     # Check 3: Network Interfaces
@@ -145,18 +149,18 @@ def run_phase1_core_system(silent: bool = False) -> Dict[str, Any]:
             "message": f"Found {len(interfaces)} network interfaces"
         }
         if not silent:
-            print(f"  [OK] Network interfaces: {len(interfaces)} found")
+            print(f"  [{Fore.GREEN}OK{Style.RESET_ALL}] Network interfaces: {len(interfaces)} found")
             for iface in interfaces[:3]:  # Show first 3
                 print(f"    - {iface['name']}: {iface['status']}")
     except Exception as e:
         phase_result["checks"]["network_interfaces"] = {
             "status": "error",
             "result": None,
-            "message": f"Failed to get network interfaces: {e}"
+            "message": f"Failed to get network interfaces: {Fore.RED}{e}{Style.RESET_ALL}"
         }
         phase_result["status"] = "error"
         if not silent:
-            print(f"  [ERROR] Network interfaces failed: {e}")
+            print(f"  [{Fore.RED}ERROR{Style.RESET_ALL}] Network interfaces failed: {Fore.RED}{e}{Style.RESET_ALL}")
     
     # Check 4: Local IP Detection
     try:
@@ -167,16 +171,16 @@ def run_phase1_core_system(silent: bool = False) -> Dict[str, Any]:
             "message": f"Local IP: {local_ip}"
         }
         if not silent:
-            print(f"  [OK] Local IP: {local_ip}")
+            print(f"  [{Fore.GREEN}OK{Style.RESET_ALL}] Local IP: {local_ip}")
     except Exception as e:
         phase_result["checks"]["local_ip"] = {
             "status": "error",
             "result": None,
-            "message": f"Failed to get local IP: {e}"
+            "message": f"Failed to get local IP: {Fore.RED}{e}{Style.RESET_ALL}"
         }
         phase_result["status"] = "warning"
         if not silent:
-            print(f"  [WARN] Local IP detection failed: {e}")
+            print(f"  [{Fore.YELLOW}WARN{Style.RESET_ALL}] Local IP detection failed: {Fore.RED}{e}{Style.RESET_ALL}")
     
     phase_result["duration"] = time.time() - phase_start
     return phase_result
@@ -206,16 +210,16 @@ def run_phase2_connectivity(silent: bool = False) -> Dict[str, Any]:
             "message": f"External IP: {external_ip}"
         }
         if not silent:
-            print(f"  [OK] External IP: {external_ip}")
+            print(f"  [{Fore.GREEN}OK{Style.RESET_ALL}] External IP: {external_ip}")
     except Exception as e:
         phase_result["checks"]["external_ip"] = {
             "status": "error",
             "result": None,
-            "message": f"Failed to get external IP: {e}"
+            "message": f"Failed to get external IP: {Fore.RED}{e}{Style.RESET_ALL}"
         }
         phase_result["status"] = "warning"
         if not silent:
-            print(f"  [WARN] External IP detection failed: {e}")
+            print(f"  [{Fore.YELLOW}WARN{Style.RESET_ALL}] External IP detection failed: {Fore.RED}{e}{Style.RESET_ALL}")
     
     # Check 2: DNS Resolution
     dns_results = test_dns_resolution()
@@ -223,7 +227,7 @@ def run_phase2_connectivity(silent: bool = False) -> Dict[str, Any]:
     if dns_results["status"] != "success":
         phase_result["status"] = "warning"
     if not silent:
-        status_text = "[OK]" if dns_results["status"] == "success" else "[WARN]"
+        status_text = f"[{Fore.GREEN}OK{Style.RESET_ALL}]" if dns_results["status"] == "success" else f"[{Fore.YELLOW}WARN{Style.RESET_ALL}]"
         print(f"  {status_text} DNS: {dns_results['message']}")
     
     # Check 3: Web Connectivity
@@ -232,7 +236,7 @@ def run_phase2_connectivity(silent: bool = False) -> Dict[str, Any]:
     if web_results["status"] != "success":
         phase_result["status"] = "warning"
     if not silent:
-        status_text = "[OK]" if web_results["status"] == "success" else "[WARN]"
+        status_text = f"[{Fore.GREEN}OK{Style.RESET_ALL}]" if web_results["status"] == "success" else f"[{Fore.YELLOW}WARN{Style.RESET_ALL}]"
         print(f"  {status_text} Web connectivity: {web_results['message']}")
     
     phase_result["duration"] = time.time() - phase_start
@@ -265,11 +269,11 @@ def run_phase3_tool_inventory(silent: bool = False) -> Dict[str, Any]:
         }
         
         if not silent:
-            print(f"  [OK] Tools found: {phase_result['tools_found']}")
-            print(f"  [WARN] Tools missing: {phase_result['tools_missing']}")
+            print(f"  [{Fore.GREEN}OK{Style.RESET_ALL}] Tools found: {phase_result['tools_found']}")
+            print(f"  [{Fore.YELLOW}WARN{Style.RESET_ALL}] Tools missing: {phase_result['tools_missing']}")
             
             if phase_result["critical_missing"]:
-                print(f"  [WARN] Critical tools missing: {', '.join(phase_result['critical_missing'])}")
+                print(f"  [{Fore.YELLOW}WARN{Style.RESET_ALL}] Critical tools missing: {', '.join(phase_result['critical_missing'])}")
                 phase_result["status"] = "warning"
     
     except ImportError:
@@ -282,7 +286,7 @@ def run_phase3_tool_inventory(silent: bool = False) -> Dict[str, Any]:
             "critical_missing": []
         }
         if not silent:
-            print("  [WARN] Tool inventory system not yet implemented")
+            print(f"  [{Fore.YELLOW}WARN{Style.RESET_ALL}] Tool inventory system not yet implemented")
     
     phase_result["duration"] = time.time() - phase_start
     return phase_result
@@ -315,8 +319,8 @@ def run_phase4_target_scope(silent: bool = False) -> Dict[str, Any]:
         }
         
         if not silent:
-            print(f"  [OK] Target scope: {phase_result['scope_type']}")
-            print(f"  [OK] Targets defined: {phase_result['targets_defined']}")
+            print(f"  [{Fore.GREEN}OK{Style.RESET_ALL}] Target scope: {phase_result['scope_type']}")
+            print(f"  [{Fore.GREEN}OK{Style.RESET_ALL}] Targets defined: {phase_result['targets_defined']}")
     
     except ImportError:
         # Memory manager not implemented yet
@@ -328,7 +332,7 @@ def run_phase4_target_scope(silent: bool = False) -> Dict[str, Any]:
             "targets_defined": 0
         }
         if not silent:
-            print("  [WARN] Target scope system not yet implemented")
+            print(f"  [{Fore.YELLOW}WARN{Style.RESET_ALL}] Target scope system not yet implemented")
             print("  Using default scope: local network only")
     
     phase_result["duration"] = time.time() - phase_start
@@ -365,7 +369,7 @@ def check_ollama_connectivity() -> Dict[str, Any]:
         return {
             "status": "error",
             "result": {"available": False},
-            "message": f"Connection failed: {e}"
+            "message": f"Connection failed: {Fore.RED}{e}{Style.RESET_ALL}"
         }
 
 
@@ -423,7 +427,7 @@ def get_external_ip() -> str:
         response = requests.get("https://api.ipify.org", timeout=10)
         return response.text.strip()
     except Exception as e:
-        raise Exception(f"Unable to determine external IP: {e}")
+        raise Exception(f"Unable to determine external IP: {Fore.RED}{e}{Style.RESET_ALL}")
 
 
 def test_dns_resolution() -> Dict[str, Any]:
@@ -453,7 +457,7 @@ def test_dns_resolution() -> Dict[str, Any]:
         return {
             "status": "error",
             "result": None,
-            "message": f"DNS test failed: {e}"
+            "message": f"DNS test failed: {Fore.RED}{e}{Style.RESET_ALL}"
         }
 
 
@@ -493,7 +497,7 @@ def test_web_connectivity() -> Dict[str, Any]:
         return {
             "status": "error",
             "result": None,
-            "message": f"Web connectivity test failed: {e}"
+            "message": f"Web connectivity test failed: {Fore.RED}{e}{Style.RESET_ALL}"
         }
 
 
@@ -521,7 +525,7 @@ def print_startup_summary(results: Dict[str, Any]) -> None:
     print(f"   Duration: {results['total_duration']:.2f}s")
     
     for phase_name, phase_data in results["phases"].items():
-        status_text = "[OK]" if phase_data["status"] == "success" else "[WARN]" if phase_data["status"] == "warning" else "[ERROR]"
+        status_text = f"[{Fore.GREEN}OK{Style.RESET_ALL}]" if phase_data["status"] == "success" else f"[{Fore.YELLOW}WARN{Style.RESET_ALL}]" if phase_data["status"] == "warning" else f"[{Fore.RED}ERROR{Style.RESET_ALL}]"
         phase_display = phase_name.replace("_", " ").title()
         print(f"   {status_text} {phase_display}: {phase_data['status']}")
 

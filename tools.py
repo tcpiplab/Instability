@@ -70,7 +70,7 @@ def get_local_ip() -> str:
             local_ip = s.getsockname()[0]
         return local_ip
     except Exception as e:
-        return f"Error getting local IP: {e}"
+        return f"Error getting local IP: {Fore.RED}{e}{Style.RESET_ALL}"
 
 
 def get_external_ip() -> str:
@@ -185,7 +185,7 @@ def ping_target(host: str = "8.8.8.8", target: str = None, arg_name: str = None,
     except subprocess.TimeoutExpired:
         return f"Ping to {destination} timed out after 10 seconds"
     except Exception as e:
-        return f"Error pinging {destination}: {e}"
+        return f"Error pinging {destination}: {Fore.RED}{e}{Style.RESET_ALL}"
 
 
 def check_dns_root_servers() -> str:
@@ -277,7 +277,7 @@ def check_local_network() -> str:
         else:
             return f"Unsupported platform: {platform.system()}"
     except Exception as e:
-        return f"Error checking local network: {e}"
+        return f"Error checking local network: {Fore.RED}{e}{Style.RESET_ALL}"
 
 
 def check_whois_servers() -> str:

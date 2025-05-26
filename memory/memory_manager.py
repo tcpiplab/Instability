@@ -230,7 +230,7 @@ def read_network_state() -> Dict[str, Any]:
         return parsed_data
     
     except Exception as e:
-        print(f"Warning: Failed to read network state file: {e}")
+        print(f"Warning: Failed to read network state file: {Fore.RED}{e}{Style.RESET_ALL}")
         return {}
 
 
@@ -270,7 +270,7 @@ def update_network_state(updates: Dict[str, Any]) -> None:
         os.rename(temp_file, NETWORK_STATE_FILE)
     
     except Exception as e:
-        print(f"Warning: Failed to update network state file: {e}")
+        print(f"Warning: Failed to update network state file: {Fore.RED}{e}{Style.RESET_ALL}")
 
 
 def read_target_scope() -> Dict[str, Any]:
@@ -292,7 +292,7 @@ def read_target_scope() -> Dict[str, Any]:
         return parsed_data
     
     except Exception as e:
-        print(f"Warning: Failed to read target scope file: {e}")
+        print(f"Warning: Failed to read target scope file: {Fore.RED}{e}{Style.RESET_ALL}")
         return {"scope_type": DEFAULT_TARGET_SCOPE, "targets": []}
 
 
@@ -346,7 +346,7 @@ def update_target_scope(scope_data: Dict[str, Any]) -> None:
         os.rename(temp_file, TARGET_SCOPE_FILE)
     
     except Exception as e:
-        print(f"Warning: Failed to update target scope file: {e}")
+        print(f"Warning: Failed to update target scope file: {Fore.RED}{e}{Style.RESET_ALL}")
 
 
 def load_session_cache() -> Dict[str, Any]:
@@ -363,7 +363,7 @@ def load_session_cache() -> Dict[str, Any]:
         with open(SESSION_CACHE_FILE, 'r') as f:
             return json.load(f)
     except Exception as e:
-        print(f"Warning: Failed to load session cache: {e}")
+        print(f"Warning: Failed to load session cache: {Fore.RED}{e}{Style.RESET_ALL}")
         create_empty_session_cache()
         return load_session_cache()
 
@@ -387,7 +387,7 @@ def save_session_cache(cache: Dict[str, Any]) -> None:
         os.rename(temp_file, SESSION_CACHE_FILE)
     
     except Exception as e:
-        print(f"Warning: Failed to save session cache: {e}")
+        print(f"Warning: Failed to save session cache: {Fore.RED}{e}{Style.RESET_ALL}")
 
 
 def cache_tool_result(tool_name: str, result: Dict[str, Any], ttl_minutes: int = 60) -> None:
@@ -418,7 +418,7 @@ def cache_tool_result(tool_name: str, result: Dict[str, Any], ttl_minutes: int =
         save_session_cache(cache)
     
     except Exception as e:
-        print(f"Warning: Failed to cache tool result: {e}")
+        print(f"Warning: Failed to cache tool result: {Fore.RED}{e}{Style.RESET_ALL}")
 
 
 def get_cached_result(tool_name: str) -> Optional[Dict[str, Any]]:
@@ -448,7 +448,7 @@ def get_cached_result(tool_name: str) -> Optional[Dict[str, Any]]:
         return None
     
     except Exception as e:
-        print(f"Warning: Failed to get cached result: {e}")
+        print(f"Warning: Failed to get cached result: {Fore.RED}{e}{Style.RESET_ALL}")
         return None
 
 
@@ -554,19 +554,19 @@ def test_memory_manager():
     
     # Test initialization
     initialize_memory_files()
-    print("[OK] Memory files initialized")
+    print("[{Fore.GREEN}OK{Style.RESET_ALL}] Memory files initialized")
     
     # Test reading network state
     network_state = read_network_state()
-    print(f"[OK] Network state loaded: {len(network_state)} sections")
+    print(f"[{Fore.GREEN}OK{Style.RESET_ALL}] Network state loaded: {len(network_state)} sections")
     
     # Test reading target scope
     target_scope = read_target_scope()
-    print(f"[OK] Target scope loaded: {target_scope.get('scope_type', 'unknown')}")
+    print(f"[{Fore.GREEN}OK{Style.RESET_ALL}] Target scope loaded: {target_scope.get('scope_type', 'unknown')}")
     
     # Test session cache
     cache = load_session_cache()
-    print(f"[OK] Session cache loaded")
+    print(f"[{Fore.GREEN}OK{Style.RESET_ALL}] Session cache loaded")
     
     return True
 

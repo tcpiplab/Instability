@@ -48,7 +48,7 @@ def load_cache(cache_file: Optional[str] = None) -> Dict[str, Any]:
                 "_last_updated": time.strftime("%Y-%m-%d %H:%M:%S")
             }
     except Exception as e:
-        print(f"Error loading cache: {e}")
+        print(f"Error loading cache: {Fore.RED}{e}{Style.RESET_ALL}")
         # Return an empty cache with timestamps if there's an error
         return {
             "_created": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -83,7 +83,7 @@ def save_cache(cache: Dict[str, Any], cache_file: Optional[str] = None) -> bool:
 
         return True
     except Exception as e:
-        print(f"Error saving cache: {e}")
+        print(f"Error saving cache: {Fore.RED}{e}{Style.RESET_ALL}")
         return False
 
 
@@ -149,7 +149,7 @@ def clear_cache(preserve_keys: Optional[List[str]] = None, cache_file: Optional[
                 if key in current_cache:
                     new_cache[key] = current_cache[key]
         except Exception as e:
-            print(f"Error preserving keys while clearing cache: {e}")
+            print(f"Error preserving keys while clearing cache: {Fore.RED}{e}{Style.RESET_ALL}")
 
     # Save the new cache
     save_cache(new_cache, cache_file)
