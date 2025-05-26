@@ -185,6 +185,13 @@ To add a new tool in v3:
 
 The tool will automatically be available to the chatbot, manual mode, and startup inventory.
 
+## TODO
+
+- Add IP address geolocation lookup tool
+- Add tool for looking up local MAC address
+- Add tool for displaying ARP table
+- Add MAC address manufacturer lookup tool (using hardcoded/pre-downloaded list for offline operation)
+
 ## Troubleshooting
 
 ### Ollama Connection Issues
