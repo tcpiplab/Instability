@@ -20,6 +20,14 @@ from colorama import Fore, Style
 # Import migrated tools from network_tools package
 from network_tools import check_external_ip_main, get_public_ip, web_check_main, resolver_check_main, monitor_dns_resolvers, dns_check_main
 
+# Import v3 pentest tools
+try:
+    from pentest.nmap_wrapper import run_nmap_scan, quick_port_scan, network_discovery, service_version_scan, os_detection_scan, comprehensive_scan
+    PENTEST_TOOLS_AVAILABLE = True
+except ImportError as e:
+    print(f"{Fore.YELLOW}Warning: Pentest tools not available: {e}{Style.RESET_ALL}")
+    PENTEST_TOOLS_AVAILABLE = False
+
 # Add parent directory to path to allow importing from original modules
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
@@ -531,6 +539,42 @@ def get_available_tools() -> Dict[str, Callable]:
         "check_nat_status": check_nat_status,
         "run_speed_test": run_speed_test
     }
+
+    # Add pentest tools if available
+    if PENTEST_TOOLS_AVAILABLE:
+        # Create wrapper functions that provide better descriptions for the chatbot
+        def nmap_scan_wrapper(target: str, scan_type: str = "basic", ports: str = None, **kwargs):
+            """Run nmap scan with specified parameters. Requires target IP/hostname."""
+            return run_nmap_scan(target=target, scan_type=scan_type, ports=ports, **kwargs)
+        
+        def quick_port_scan_wrapper(target: str, ports: str = "80,443,22,21,25,53,110,143,993,995", **kwargs):
+            """Quick port scan for common services. Requires target IP/hostname."""
+            return quick_port_scan(target=target, ports=ports, **kwargs)
+        
+        def network_discovery_wrapper(network: str, **kwargs):
+            """Discover live hosts on a network. Requires network in CIDR notation (e.g., 192.168.1.0/24)."""
+            return network_discovery(network=network, **kwargs)
+        
+        def service_version_scan_wrapper(target: str, ports: str = None, **kwargs):
+            """Scan for service versions on open ports. Requires target IP/hostname."""
+            return service_version_scan(target=target, ports=ports, **kwargs)
+        
+        def os_detection_scan_wrapper(target: str, **kwargs):
+            """Attempt to detect target operating system. Requires target IP/hostname."""
+            return os_detection_scan(target=target, **kwargs)
+        
+        def comprehensive_scan_wrapper(target: str, **kwargs):
+            """Comprehensive scan with service detection and OS fingerprinting. Requires target IP/hostname."""
+            return comprehensive_scan(target=target, **kwargs)
+        
+        tools.update({
+            "nmap_scan": nmap_scan_wrapper,
+            "quick_port_scan": quick_port_scan_wrapper,
+            "network_discovery": network_discovery_wrapper,
+            "service_version_scan": service_version_scan_wrapper,
+            "os_detection_scan": os_detection_scan_wrapper,
+            "comprehensive_scan": comprehensive_scan_wrapper
+        })
 
     # Add more original tools if available - example of how to add more
     if ORIGINAL_TOOLS_AVAILABLE:
