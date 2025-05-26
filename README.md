@@ -30,7 +30,7 @@ Instability v3 builds upon v2 with enhanced functionality and improved architect
 
 ### Requirements
 
-- Python 3.7 or higher
+- Python 3.11 or higher
 - [Ollama](https://ollama.ai/) installed and running locally
 - An Ollama model installed (default: `phi3:14b`, but any compatible model can be used)
 
@@ -229,8 +229,11 @@ The tool will automatically be available to the chatbot, manual mode, and startu
 
 ## TODO
 
+- Add tool to make sure nmap can scan the local network
 - Add IP address geolocation lookup tool
-- Add tool for looking up local MAC address
+- Add tool for checking local CIDR mask and save to memory
+- Add tools for checking local IP default gateway IP address and save to memory
+- Add tool for looking up local MAC address and save to memory
 - Add tool for displaying ARP table
 - Add MAC address manufacturer lookup tool (using hardcoded/pre-downloaded list for offline operation)
 
