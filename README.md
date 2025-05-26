@@ -76,6 +76,8 @@ python instability.py chatbot --model qwen3:8b
 python instability.py chatbot
 ```
 
+The chatbot automatically runs the v3 4-phase startup sequence before launching, providing comprehensive environment assessment and tool inventory.
+
 You can specify a different Ollama model using the `--model` or `-m` option:
 
 ```bash
@@ -92,22 +94,39 @@ The default model is `phi3:14b` if no model is specified.
 python instability.py manual [tool_name]
 ```
 
+Available tools are organized into categories:
+- **Network Diagnostics**: ping, dns_check, web_check, network_scan
+- **Pentesting**: nmap_scan, port_scan, host_discovery  
+- **System Info**: system_info, interface_status, tool_inventory
+
 To see a list of available tools:
 
 ```bash
 python instability.py manual
 ```
 
-To run all tools:
+To run comprehensive diagnostics:
 
 ```bash
 python instability.py manual all
 ```
 
-### Testing the Environment
+### Testing the Environment (v3 Startup Sequence)
 
 ```bash
 python instability.py test
+```
+
+This runs the comprehensive v3 4-phase startup sequence:
+1. **Core System Verification** - OS detection, Ollama connectivity, network interfaces, local IP
+2. **Internet Connectivity Assessment** - External IP detection, DNS resolution, web services
+3. **Pentesting Tool Inventory** - Scan for nmap, nuclei, httpx, feroxbuster, etc.
+4. **Target Scope Configuration** - Memory and scope management (partially implemented)
+
+### Running Tests
+
+```bash
+python instability.py run-tests
 ```
 
 ### Getting Help
@@ -184,6 +203,29 @@ To add a new tool in v3:
 5. **Registration**: Add to module's `__init__.py` for automatic discovery
 
 The tool will automatically be available to the chatbot, manual mode, and startup inventory.
+
+## Current Implementation Status
+
+### ✅ Fully Functional
+- **4-phase startup sequence** - Complete system assessment
+- **Manual tool execution** - All listed tools working  
+- **Chatbot integration** - v3 startup sequence integrated
+- **Tool inventory** - Detection of external pentesting tools
+- **Network diagnostics** - Layer 2/3, DNS, web connectivity testing
+- **Basic pentesting tools** - nmap integration and wrappers
+- **Cross-platform support** - Windows, Linux, macOS compatibility
+- **Graceful degradation** - Functions without internet/Ollama
+
+### ⚠️ Partially Implemented  
+- **Memory system** - Framework in place, markdown files defined but not fully functional
+- **Target scope management** - Basic structure exists, needs full implementation
+- **Advanced pentesting features** - Some tools need expanded functionality
+
+### 📋 Planned Features
+- Additional pentesting tool wrappers (nuclei, httpx, feroxbuster full integration)
+- Enhanced memory persistence and session tracking
+- Advanced target scope and engagement management
+- Web-based interface option
 
 ## TODO
 
