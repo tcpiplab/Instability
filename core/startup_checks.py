@@ -497,6 +497,24 @@ def test_web_connectivity() -> Dict[str, Any]:
         }
 
 
+def check_tool_inventory(silent: bool = False) -> Dict[str, Any]:
+    """
+    Quick tool inventory check for manual mode.
+    Returns simplified tool availability information.
+    """
+    try:
+        from pentest.tool_detector import scan_for_tools
+        tool_inventory = scan_for_tools()
+        return tool_inventory
+    except ImportError:
+        # Tool detector not implemented yet - return empty inventory
+        return {
+            "tools": {},
+            "scan_time": 0.0,
+            "system": "unknown"
+        }
+
+
 def print_startup_summary(results: Dict[str, Any]) -> None:
     """Print a summary of startup check results."""
     print("\n📊 Startup Summary:")

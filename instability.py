@@ -208,7 +208,7 @@ def _get_v3_tools_registry() -> Dict[str, Any]:
         "ping": {"module": "network.layer3_diagnostics", "function": "ping_host", "description": "Test ICMP connectivity"},
         "dns_check": {"module": "network.dns_diagnostics", "function": "resolve_hostname", "description": "DNS resolution testing"},
         "web_check": {"module": "network.web_connectivity", "function": "test_http_connectivity", "description": "HTTP/HTTPS connectivity test"},
-        "network_scan": {"module": "network.layer2_diagnostics", "function": "get_network_interfaces", "description": "Network interface analysis"},
+        "network_scan": {"module": "network.layer2_diagnostics", "function": "get_all_interfaces", "description": "Network interface analysis"},
         
         # Pentesting Tools
         "nmap_scan": {"module": "pentest.nmap_wrapper", "function": "run_nmap_scan", "description": "Network scanning with nmap"},
@@ -217,7 +217,7 @@ def _get_v3_tools_registry() -> Dict[str, Any]:
         
         # System Information
         "system_info": {"module": "network.layer2_diagnostics", "function": "get_system_info", "description": "System information"},
-        "interface_status": {"module": "network.layer2_diagnostics", "function": "get_network_interfaces", "description": "Network interface status"},
+        "interface_status": {"module": "network.layer2_diagnostics", "function": "get_all_interfaces", "description": "Network interface status"},
         "tool_inventory": {"module": "pentest.tool_detector", "function": "scan_for_tools", "description": "Scan for available tools"}
     }
 
@@ -255,10 +255,19 @@ def _execute_v3_tool(tool_name: str, tool_config: Dict[str, Any]):
             result = func(target, silent=False)
         elif tool_name == "tool_inventory":
             result = func(force_refresh=True)
+        elif tool_name in ["interface_status", "network_scan"]:
+            # Tools that don't accept silent parameter
+            result = func()
         else:
             result = func(silent=False)
         
-        print(f"{Fore.CYAN}Result: {result.get('success', False)}{Style.RESET_ALL}")
+        # Handle different result types
+        if isinstance(result, dict):
+            print(f"{Fore.CYAN}Result: {result.get('success', 'Unknown')}{Style.RESET_ALL}")
+        elif isinstance(result, list):
+            print(f"{Fore.CYAN}Found {len(result)} items{Style.RESET_ALL}")
+        else:
+            print(f"{Fore.CYAN}Result: {result}{Style.RESET_ALL}")
         
     except Exception as e:
         print(f"{Fore.RED}Error executing {tool_name}: {e}{Style.RESET_ALL}")
@@ -270,7 +279,7 @@ def _run_comprehensive_diagnostics():
     
     try:
         # Import required modules
-        from network.layer2_diagnostics import get_system_info, get_network_interfaces
+        from network.layer2_diagnostics import get_system_info, get_all_interfaces
         from network.layer3_diagnostics import get_external_ip, ping_host
         from network.web_connectivity import test_common_web_services
         from pentest.tool_detector import scan_for_tools
@@ -281,7 +290,7 @@ def _run_comprehensive_diagnostics():
         
         # Network Interfaces
         print(f"\n{Fore.YELLOW}2. Network Interfaces{Style.RESET_ALL}")
-        interfaces = get_network_interfaces(silent=False)
+        interfaces = get_all_interfaces()
         
         # External Connectivity
         print(f"\n{Fore.YELLOW}3. External Connectivity{Style.RESET_ALL}")
