@@ -13,6 +13,9 @@ import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
+# Import colorama for terminal colors
+from colorama import Fore, Style
+
 # Import configuration
 from config import PING_TIMEOUT, TRACEROUTE_TIMEOUT
 

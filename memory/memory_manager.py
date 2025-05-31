@@ -13,6 +13,9 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 
+# Import colorama for terminal colors
+from colorama import Fore, Style
+
 # Import configuration
 from config import (
     MEMORY_DIR, NETWORK_STATE_FILE, TARGET_SCOPE_FILE, SESSION_CACHE_FILE,
@@ -554,7 +557,7 @@ def test_memory_manager():
     
     # Test initialization
     initialize_memory_files()
-    print("[{Fore.GREEN}OK{Style.RESET_ALL}] Memory files initialized")
+    print(f"[{Fore.GREEN}OK{Style.RESET_ALL}] Memory files initialized")
     
     # Test reading network state
     network_state = read_network_state()
