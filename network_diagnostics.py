@@ -25,6 +25,9 @@ from network_tools import check_external_ip_main, get_public_ip, web_check_main,
 # Import standardized tool result functions
 from utils import create_success_result, create_error_result, wrap_legacy_result, standardize_tool_output
 
+# Import centralized configuration
+from config import get_dns_servers, DNS_TEST_SERVERS, COMMON_PORTS
+
 # Import v3 pentest tools
 try:
     from pentest.nmap_wrapper import run_nmap_scan, quick_port_scan, network_discovery, service_version_scan, os_detection_scan, comprehensive_scan
@@ -118,7 +121,7 @@ def get_local_ip() -> str:
         # Create a socket to get the local IP
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             # Connect to a public IP (doesn't actually send packets)
-            s.connect(("8.8.8.8", 80))
+            s.connect((DNS_TEST_SERVERS[0], 80))
             local_ip = s.getsockname()[0]
         return local_ip
     except Exception as e:
@@ -141,7 +144,7 @@ def check_internet_connection() -> str:
     """Check if the internet is reachable"""
     try:
         # Try to connect to a reliable server
-        socket.create_connection(("8.8.8.8", 53), timeout=3)
+        socket.create_connection((DNS_TEST_SERVERS[0], 53), timeout=3)
         return "Connected"
     except Exception:
         return "Disconnected"
@@ -157,12 +160,12 @@ def check_dns_resolvers() -> str:
         print(f"{Fore.YELLOW}Error using migrated DNS resolver check: {e}{Style.RESET_ALL}")
         
         # Fallback implementation if the migrated module fails
-        resolvers = {
-            "Google Public DNS": "8.8.8.8",
-            "Cloudflare DNS": "1.1.1.1",
-            "Quad9 DNS": "9.9.9.9",
-            "OpenDNS": "208.67.222.222"
-        }
+        # Use centralized DNS server configuration
+        all_servers = get_dns_servers(include_additional=True)
+        resolver_names = ["Google Public DNS", "Cloudflare DNS", "OpenDNS", "Quad9 DNS", "Google Secondary", "Cloudflare Secondary", "OpenDNS Secondary"]
+        resolvers = {}
+        for i, server in enumerate(all_servers[:len(resolver_names)]):
+            resolvers[resolver_names[i]] = server
 
         results = []
         for name, ip in resolvers.items():
@@ -176,7 +179,7 @@ def check_dns_resolvers() -> str:
 
 
 @standardize_tool_output()
-def ping_target(host: str = "8.8.8.8", target: str = None, arg_name: str = None, count: int = 4) -> str:
+def ping_target(host: str = None, target: str = None, arg_name: str = None, count: int = 4) -> str:
     """Ping a target host and measure response time
     
     Args:
@@ -194,8 +197,11 @@ def ping_target(host: str = "8.8.8.8", target: str = None, arg_name: str = None,
             destination = arg_name
         elif target is not None:
             destination = target
-        else:
+        elif host is not None:
             destination = host
+        else:
+            # Use default DNS server from configuration
+            destination = DNS_TEST_SERVERS[0]
         
         # Determine command based on operating system
         if platform.system().lower() == "windows":
