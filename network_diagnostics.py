@@ -14,11 +14,16 @@ import socket
 import subprocess
 import platform
 import json
+import time
+from datetime import datetime
 from typing import Dict, Any, Callable, Optional, List
 from colorama import Fore, Style
 
 # Import migrated tools from network_tools package
 from network_tools import check_external_ip_main, get_public_ip, web_check_main, resolver_check_main, monitor_dns_resolvers, dns_check_main
+
+# Import standardized tool result functions
+from utils import create_success_result, create_error_result, wrap_legacy_result, standardize_tool_output
 
 # Import v3 pentest tools
 try:
@@ -53,24 +58,60 @@ except ImportError as e:
 
 # Basic tool implementations (fallbacks if original tools are not available)
 
-def get_os_info() -> str:
+def get_os_info() -> Dict[str, Any]:
     """Get information about the operating system and environment"""
-    if ORIGINAL_TOOLS_AVAILABLE:
-        try:
-            return get_os_type()
-        except Exception as e:
-            print(f"{Fore.YELLOW}Error using original get_os_type: {e}{Style.RESET_ALL}")
+    start_time = datetime.now()
+    
+    try:
+        if ORIGINAL_TOOLS_AVAILABLE:
+            try:
+                legacy_result = get_os_type()
+                execution_time = (datetime.now() - start_time).total_seconds()
+                return wrap_legacy_result(
+                    tool_name="get_os_info",
+                    legacy_result=legacy_result,
+                    execution_time=execution_time,
+                    command_executed="get_os_type() (original tool)"
+                )
+            except Exception as e:
+                print(f"{Fore.YELLOW}Error using original get_os_type: {e}{Style.RESET_ALL}")
 
-    # Fallback implementation
-    system = platform.system()
-    release = platform.release()
-    version = platform.version()
-    machine = platform.machine()
-    processor = platform.processor()
+        # Fallback implementation
+        system = platform.system()
+        release = platform.release()
+        version = platform.version()
+        machine = platform.machine()
+        processor = platform.processor()
+        
+        result_str = f"{system} {release} ({version}) {machine} {processor}"
+        execution_time = (datetime.now() - start_time).total_seconds()
+        
+        return create_success_result(
+            tool_name="get_os_info",
+            execution_time=execution_time,
+            command_executed="platform.system() + details",
+            parsed_data={
+                "system": system,
+                "release": release,
+                "version": version,
+                "machine": machine,
+                "processor": processor,
+                "summary": result_str
+            },
+            stdout=result_str
+        )
+    except Exception as e:
+        execution_time = (datetime.now() - start_time).total_seconds()
+        return create_error_result(
+            tool_name="get_os_info",
+            execution_time=execution_time,
+            error_message=f"Failed to get OS info: {str(e)}",
+            error_type="execution",
+            command_executed="platform module calls"
+        )
 
-    return f"{system} {release} ({version}) {machine} {processor}"
 
-
+@standardize_tool_output()
 def get_local_ip() -> str:
     """Get the local IP address of this machine"""
     try:
@@ -84,6 +125,7 @@ def get_local_ip() -> str:
         return f"Error getting local IP: {Fore.RED}{e}{Style.RESET_ALL}"
 
 
+@standardize_tool_output()
 def get_external_ip() -> str:
     """Get the external/public IP address"""
     # Use the migrated check_external_ip module
@@ -94,6 +136,7 @@ def get_external_ip() -> str:
         return "Could not determine external IP (offline or no connectivity)"
 
 
+@standardize_tool_output()
 def check_internet_connection() -> str:
     """Check if the internet is reachable"""
     try:
@@ -104,6 +147,7 @@ def check_internet_connection() -> str:
         return "Disconnected"
 
 
+@standardize_tool_output()
 def check_dns_resolvers() -> str:
     """Check if DNS resolvers are working properly"""
     # Use the migrated resolver_check module
@@ -131,6 +175,7 @@ def check_dns_resolvers() -> str:
         return "\n".join(results)
 
 
+@standardize_tool_output()
 def ping_target(host: str = "8.8.8.8", target: str = None, arg_name: str = None, count: int = 4) -> str:
     """Ping a target host and measure response time
     
@@ -181,6 +226,7 @@ def ping_target(host: str = "8.8.8.8", target: str = None, arg_name: str = None,
         return f"Error pinging {destination}: {Fore.RED}{e}{Style.RESET_ALL}"
 
 
+@standardize_tool_output()
 def check_dns_root_servers() -> str:
     """Check if DNS root servers are reachable"""
     # Use the migrated dns_check module
@@ -210,6 +256,7 @@ def check_dns_root_servers() -> str:
         return "\n".join(results)
 
 
+@standardize_tool_output()
 def check_websites() -> str:
     """Check if major websites are reachable"""
     # Use the migrated web_check module
@@ -245,6 +292,7 @@ def check_websites() -> str:
         return "\n".join(results)
 
 
+@standardize_tool_output()
 def check_local_network() -> str:
     """Check local network interfaces and link status"""
     if ORIGINAL_TOOLS_AVAILABLE:
@@ -273,6 +321,7 @@ def check_local_network() -> str:
         return f"Error checking local network: {Fore.RED}{e}{Style.RESET_ALL}"
 
 
+@standardize_tool_output()
 def check_whois_servers() -> str:
     """Check if WHOIS servers are reachable"""
     if ORIGINAL_TOOLS_AVAILABLE:
@@ -322,6 +371,7 @@ def is_private_ip(ip: str) -> bool:
         return False
 
 
+@standardize_tool_output()
 def check_nat_status() -> str:
     """Check if we are running behind NAT by comparing local and external IP addresses.
     
@@ -365,6 +415,7 @@ def check_nat_status() -> str:
         return f"Error checking NAT status: {Fore.RED}{e}{Style.RESET_ALL}"
 
 
+@standardize_tool_output()
 def run_speed_test() -> str:
     """Use this tool to run a speed test.
     This speed test tool will first check to make sure we are running macOS, also called Darwin.
@@ -436,6 +487,7 @@ def parse_network_quality_output(output: str) -> dict:
     return summary
 
 
+@standardize_tool_output()
 def generate_speed_test_report(summary: dict) -> str:
     """Generate a human-readable report from speed test results
     
@@ -475,6 +527,7 @@ def generate_speed_test_report(summary: dict) -> str:
     return "\n".join(report)
 
 
+@standardize_tool_output()
 def compare_speed_to_telecom(speed_mbps: float) -> str:
     """Compare a network speed to common telecom reference points
     
@@ -616,6 +669,7 @@ def execute_tool(tool_name: str, args: Optional[Dict[str, Any]] = None) -> Any:
         return tool_func()
 
 
+@standardize_tool_output()
 def list_tool_help() -> str:
     """
     List all available tools with their descriptions

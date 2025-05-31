@@ -8,8 +8,13 @@ Part of the instability.py v3 network diagnostics suite.
 import socket
 import subprocess
 import platform
+import time
+from datetime import datetime
 from typing import Dict, Any, List, Optional
 from colorama import Fore
+
+# Import standardized tool result functions
+from utils import create_success_result, create_error_result
 
 def resolve_hostname(hostname: str, record_type: str = "A", silent: bool = False) -> Dict[str, Any]:
     """
