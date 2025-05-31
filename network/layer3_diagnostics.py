@@ -16,6 +16,12 @@ from datetime import datetime
 # Import colorama for terminal colors
 from colorama import Fore, Style
 
+# Import centralized error handling
+from core.error_handling import (
+    create_error_response, ErrorType, ErrorCode, get_timeout, ErrorRecovery,
+    create_network_error, create_system_error, create_input_error
+)
+
 # Import configuration
 from config import PING_TIMEOUT, TRACEROUTE_TIMEOUT
 
@@ -82,30 +88,47 @@ def get_external_ip(timeout: int = 10, silent: bool = False) -> Dict[str, Any]:
         raise Exception("All IP detection services failed")
     
     except ImportError:
-        error_msg = "requests library not available for external IP detection"
+        execution_time = (datetime.now() - start_time).total_seconds()
+        if not silent:
+            print(f"{Fore.RED}Error: requests library not available for external IP detection{Style.RESET_ALL}")
+        
+        return create_system_error(
+            ErrorCode.TOOL_MISSING,
+            tool_name="get_external_ip",
+            execution_time=execution_time,
+            details={
+                "command": f"get_external_ip(timeout={timeout})",
+                "options": {"timeout": timeout}
+            },
+            tool="requests library"
+        )
+    
     except Exception as e:
-        error_msg = f"Failed to get external IP: {Fore.RED}{e}{Style.RESET_ALL}"
-    
-    execution_time = (datetime.now() - start_time).total_seconds()
-    
-    if not silent:
-        print(f"Error: {error_msg}")
-    
-    return {
-        "success": False,
-        "exit_code": 1,
-        "execution_time": execution_time,
-        "timestamp": start_time.isoformat(),
-        "tool_name": "get_external_ip",
-        "command_executed": f"get_external_ip(timeout={timeout})",
-        "stdout": "",
-        "stderr": error_msg,
-        "parsed_data": {},
-        "error_type": "network",
-        "error_message": error_msg,
-        "target": None,
-        "options_used": {"timeout": timeout}
-    }
+        execution_time = (datetime.now() - start_time).total_seconds()
+        
+        # Determine specific error type
+        error_msg = str(e)
+        if "timeout" in error_msg.lower():
+            error_code = ErrorCode.TIMEOUT
+        elif "connection" in error_msg.lower():
+            error_code = ErrorCode.CONNECTION_FAILED
+        else:
+            error_code = ErrorCode.UNREACHABLE
+        
+        if not silent:
+            print(f"{Fore.RED}Error: Failed to get external IP: {e}{Style.RESET_ALL}")
+        
+        return create_network_error(
+            error_code,
+            tool_name="get_external_ip",
+            execution_time=execution_time,
+            details={
+                "command": f"get_external_ip(timeout={timeout})",
+                "stderr": str(e),
+                "options": {"timeout": timeout}
+            },
+            timeout=timeout
+        )
 
 
 def ping_host(target: str, count: int = 4, timeout: int = 5, silent: bool = False) -> Dict[str, Any]:

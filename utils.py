@@ -13,6 +13,9 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List, Tuple
 from colorama import Fore, Style, init
 
+# Import centralized error handling
+from core.error_handling import ErrorType, ErrorCode, get_timeout
+
 # Import Rich for Markdown rendering if available
 try:
     from rich.console import Console
@@ -480,19 +483,45 @@ def create_error_result(
     Returns:
         Standardized error result
     """
-    return create_tool_result(
-        success=False,
+    # Try to map legacy error types to new ErrorType enum
+    error_type_mapping = {
+        "network": ErrorType.NETWORK,
+        "timeout": ErrorType.NETWORK,
+        "execution": ErrorType.EXECUTION,
+        "invalid_target": ErrorType.INPUT,
+        "system": ErrorType.SYSTEM,
+        "configuration": ErrorType.CONFIGURATION
+    }
+    
+    # Map to appropriate error code
+    error_code_mapping = {
+        "network": ErrorCode.CONNECTION_FAILED,
+        "timeout": ErrorCode.TIMEOUT,
+        "execution": ErrorCode.COMMAND_FAILED,
+        "invalid_target": ErrorCode.INVALID_TARGET,
+        "system": ErrorCode.UNEXPECTED_ERROR,
+        "configuration": ErrorCode.INVALID_CONFIG
+    }
+    
+    mapped_type = error_type_mapping.get(error_type, ErrorType.EXECUTION)
+    mapped_code = error_code_mapping.get(error_type, ErrorCode.UNEXPECTED_ERROR)
+    
+    # Import here to avoid circular import
+    from core.error_handling import create_error_response
+    
+    return create_error_response(
+        error_type=mapped_type,
+        error_code=mapped_code,
+        message=error_message,
         tool_name=tool_name,
         execution_time=execution_time,
-        command_executed=command_executed,
         target=target,
-        stdout="",
-        stderr=stderr,
-        parsed_data={},
-        error_type=error_type,
-        error_message=error_message,
-        exit_code=exit_code,
-        options_used=options_used,
+        details={
+            "command": command_executed,
+            "stderr": stderr,
+            "exit_code": exit_code,
+            "options": options_used or {}
+        },
         **kwargs
     )
 
@@ -606,13 +635,26 @@ def standardize_tool_output(tool_name: str = None):
                 
             except Exception as e:
                 execution_time = (datetime.now() - start_time).total_seconds()
+                
+                # Determine error type based on exception
+                error_type = "execution"
+                if "timeout" in str(e).lower():
+                    error_type = "timeout"
+                elif "connection" in str(e).lower() or "network" in str(e).lower():
+                    error_type = "network"
+                elif "permission" in str(e).lower() or "denied" in str(e).lower():
+                    error_type = "system"
+                elif "invalid" in str(e).lower() or "format" in str(e).lower():
+                    error_type = "invalid_target"
+                
                 return create_error_result(
                     tool_name=actual_tool_name,
                     execution_time=execution_time,
                     error_message=str(e),
-                    error_type="execution",
+                    error_type=error_type,
                     command_executed=f"{func.__name__}({', '.join(str(arg) for arg in args)})",
-                    stderr=str(e)
+                    stderr=str(e),
+                    target=target
                 )
         
         # Preserve original function metadata
