@@ -194,15 +194,43 @@ This implementation follows these key principles:
 
 ## Extending the Tools
 
-To add a new tool in v3:
+To add a new tool in v3, you have two approaches:
 
-1. **Network Tools**: Add to appropriate module in `network/`
-2. **Pentesting Tools**: Add wrapper to `pentest/` module
-3. **Tool Detection**: Update `pentest/tool_detector.py` with detection logic
-4. **Configuration**: Add tool paths to `config.py`
-5. **Registration**: Add to module's `__init__.py` for automatic discovery
+### Option 1: Simple Decorator Approach (Recommended for basic tools)
+```python
+from utils import standardize_tool_output
 
-The tool will automatically be available to the chatbot, manual mode, and startup inventory.
+@standardize_tool_output()
+def my_new_tool(target: str, option: str = "default") -> str:
+    """Tool description"""
+    # Your tool implementation
+    return "tool result"
+```
+
+### Option 2: Full Registry Integration (Recommended for complex tools)
+1. **Add your function** to the appropriate module in `network/`, `pentest/`, etc.
+2. **Create get_module_tools()** function in your module:
+```python
+def get_module_tools():
+    from core.tools_registry import ToolMetadata, ParameterInfo, ParameterType, ToolCategory
+    return {
+        "my_tool": ToolMetadata(
+            name="my_tool",
+            function_name="my_new_tool", 
+            module_path="network.my_module",
+            description="Tool description",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={
+                "target": ParameterInfo(ParameterType.STRING, required=True),
+                "option": ParameterInfo(ParameterType.STRING, default="default")
+            }
+        )
+    }
+```
+3. **External Tools**: Update `pentest/tool_detector.py` if it's an external dependency
+4. **Configuration**: Add any constants to `config.py`
+
+The tool will automatically be discovered and available in both chatbot and manual modes.
 
 ## Current Implementation Status
 
@@ -215,6 +243,10 @@ The tool will automatically be available to the chatbot, manual mode, and startu
 - **Basic pentesting tools** - nmap integration and wrappers
 - **Cross-platform support** - Windows, Linux, macOS compatibility
 - **Graceful degradation** - Functions without internet/Ollama
+- **Unified tool interfaces** - Standardized return formats across all tools
+- **Centralized configuration** - All constants and settings in config.py
+- **Enhanced error handling** - Contextual error messages with actionable suggestions
+- **Automatic tool registration** - Plugin-style architecture with metadata
 
 ### ⚠ Partially Implemented  
 - **Memory system** - Framework in place, markdown files defined but not fully functional

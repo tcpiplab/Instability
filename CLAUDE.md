@@ -54,52 +54,79 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **config.py**: Centralized configuration constants
 
 ## Tool Development (v3)
-When creating tools for v3, follow these simple principles:
+When creating tools for v3, you have two approaches for maximum flexibility:
 
-### Tool Placement
+### Option 1: Simple Decorator Approach (Recommended for most tools)
+```python
+from utils import standardize_tool_output
+from config import get_timeout, DNS_TEST_SERVERS
+
+@standardize_tool_output()
+def my_network_tool(target: str, timeout: int = None) -> str:
+    """Tool description and purpose"""
+    if timeout is None:
+        timeout = get_timeout("ping")  # Use centralized config
+    
+    # Tool implementation
+    result = do_network_operation(target, timeout)
+    return result  # Automatically wrapped in standard format
+```
+
+### Option 2: Full Registry Integration (For complex tools with rich metadata)
+```python
+# 1. Implement your tool function
+def advanced_scan(target: str, scan_type: str = "basic", silent: bool = False) -> Dict[str, Any]:
+    """Advanced scanning tool with multiple options"""
+    from core.error_handling import create_network_error, ErrorCode
+    from config import get_timeout
+    
+    start_time = datetime.now()
+    timeout = get_timeout("nmap", scan_type)
+    
+    try:
+        result = perform_scan(target, scan_type, timeout)
+        return create_success_result(
+            tool_name="advanced_scan",
+            execution_time=(datetime.now() - start_time).total_seconds(),
+            parsed_data=result,
+            target=target
+        )
+    except Exception as e:
+        return create_network_error(
+            ErrorCode.CONNECTION_FAILED,
+            tool_name="advanced_scan",
+            execution_time=(datetime.now() - start_time).total_seconds(),
+            target=target
+        )
+
+# 2. Add registry metadata
+def get_module_tools():
+    from core.tools_registry import ToolMetadata, ParameterInfo, ParameterType, ToolCategory
+    return {
+        "advanced_scan": ToolMetadata(
+            name="advanced_scan",
+            function_name="advanced_scan",
+            module_path="network.advanced_module",
+            description="Advanced network scanning with multiple scan types",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={
+                "target": ParameterInfo(ParameterType.STRING, required=True, description="Target to scan"),
+                "scan_type": ParameterInfo(ParameterType.STRING, default="basic", 
+                                         choices=["basic", "comprehensive", "stealth"])
+            },
+            aliases=["adv_scan", "scan_advanced"],
+            examples=["advanced_scan 192.168.1.1", "advanced_scan example.com comprehensive"]
+        )
+    }
+```
+
+### Tool Placement and Registration
 - **Network diagnostics**: Place in `network/` module
 - **Pentesting tools**: Place in `pentest/` module 
 - **System utilities**: Place in appropriate module or `utils/`
-
-### Implementation Guidelines
-- **Keep it simple**: Write direct functions, avoid complex classes
-- **Consistent interfaces**: Return standardized result dictionaries
-- **Cross-platform**: Handle Windows/Linux/macOS differences gracefully
-- **Error handling**: Use try/except with informative error messages
-- **Documentation**: Include clear docstrings explaining purpose and usage
-
-### Tool Registration
-1. **Manual mode**: Add to `_get_v3_tools_registry()` in `instability.py`
-2. **Chatbot mode**: Add to tool registry in `network_diagnostics.py` or equivalent
-3. **Tool detection**: Add to `pentest/tool_detector.py` if it's an external tool
-4. **Startup inventory**: External tools are automatically detected
-
-### Tool Function Structure
-```python
-def my_tool(target: str, silent: bool = False) -> Dict[str, Any]:
-    """Tool description and purpose"""
-    start_time = datetime.now()
-    
-    try:
-        # Tool implementation
-        result = do_the_work(target)
-        
-        return {
-            "success": True,
-            "result": result,
-            "execution_time": (datetime.now() - start_time).total_seconds(),
-            "timestamp": start_time.isoformat(),
-            "tool_name": "my_tool",
-            "target": target
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "execution_time": (datetime.now() - start_time).total_seconds(),
-            "tool_name": "my_tool"
-        }
-```
+- **Configuration**: Add constants to `config.py` using centralized approach
+- **External tools**: Add to `pentest/tool_detector.py` if it's an external dependency
+- **Automatic discovery**: Tools are automatically found via `get_module_tools()` or decorator
 
 ## Dependencies
 - Ollama Python API
@@ -134,6 +161,10 @@ The v3 integration includes:
 - ☑︎ Tool interface standardization complete
 - ☑︎ Chatbot integration with v3 modules
 - ☑︎ Error handling and graceful degradation
+- ☑︎ Unified tool registration system with automatic discovery
+- ☑︎ Centralized configuration management
+- ☑︎ Standardized error handling with contextual suggestions
+- ☑︎ Plugin-style architecture for easy tool addition
 - ⚠ Memory manager and tool detector stubs (functional but not fully implemented)
 - ⚠ Some pentesting tools need full wrapper implementation
 
