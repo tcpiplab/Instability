@@ -820,6 +820,15 @@ def get_module_tools():
             category=ToolCategory.NETWORK_DIAGNOSTICS,
             parameters={},
             examples=["run_speed_test"]
+        ),
+        "check_whois_servers": ToolMetadata(
+            name="check_whois_servers",
+            function_name="check_whois_servers",
+            module_path="network_diagnostics",
+            description="Check if WHOIS servers are reachable",
+            category=ToolCategory.WEB,
+            parameters={},
+            examples=["check_whois_servers"]
         )
     }
 
