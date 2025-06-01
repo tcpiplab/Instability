@@ -223,11 +223,12 @@ class ToolRegistry:
         """
         try:
             from pentest.tool_detector import scan_for_tools
-            external_tools = scan_for_tools()
-            self._external_tools = external_tools
+            external_tools_inventory = scan_for_tools()
+            # Extract the tools dictionary from the inventory structure
+            self._external_tools = external_tools_inventory.get("tools", {})
             
             # Register external tools as metadata entries
-            for tool_name, tool_info in external_tools.items():
+            for tool_name, tool_info in self._external_tools.items():
                 if tool_info.get("found", False):
                     # Create metadata for external tool
                     metadata = ToolMetadata(
