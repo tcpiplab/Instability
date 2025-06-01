@@ -766,6 +766,33 @@ def get_module_tools():
             category=ToolCategory.SYSTEM_INFO,
             parameters={},  # This function takes NO parameters
             examples=["get_os_info"]
+        ),
+        "check_internet_connection": ToolMetadata(
+            name="check_internet_connection",
+            function_name="check_internet_connection",
+            module_path="network_diagnostics",
+            description="Check if the internet is reachable from this machine",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={},  # This function takes NO parameters
+            examples=["check_internet_connection"]
+        ),
+        "check_dns_resolvers": ToolMetadata(
+            name="check_dns_resolvers",
+            function_name="check_dns_resolvers",
+            module_path="network_diagnostics",
+            description="Check if DNS resolvers are working properly",
+            category=ToolCategory.DNS,
+            parameters={},
+            examples=["check_dns_resolvers"]
+        ),
+        "check_websites": ToolMetadata(
+            name="check_websites",
+            function_name="check_websites",
+            module_path="network_diagnostics",
+            description="Check if major websites are reachable",
+            category=ToolCategory.WEB,
+            parameters={},
+            examples=["check_websites"]
         )
     }
 
