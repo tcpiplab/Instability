@@ -234,8 +234,8 @@ def parse_tool_call(content: str) -> Tuple[Optional[str], Optional[Dict[str, Any
             tool_name = tool_part.split("\n")[0].strip()
         
         # Clean up tool name - remove parentheses if present (AI sometimes adds them)
-        if tool_name.endswith("()"):
-            tool_name = tool_name[:-2]
+        if "(" in tool_name:
+            tool_name = tool_name.split("(")[0]
 
         # Extract args if present
         args = {}
