@@ -385,9 +385,20 @@ def check_nat_status() -> str:
         Detailed analysis including NAT status confirmation and labeled IP addresses
     """
     try:
-        # Get local and external IP addresses
-        local_ip = get_local_ip()
-        external_ip = get_external_ip()
+        # Get local and external IP addresses - extract actual IPs from standardized results
+        local_ip_result = get_local_ip()
+        external_ip_result = get_external_ip()
+        
+        # Extract the actual IP addresses from the standardized result format
+        if isinstance(local_ip_result, dict) and 'stdout' in local_ip_result:
+            local_ip = local_ip_result['stdout']
+        else:
+            local_ip = str(local_ip_result)
+            
+        if isinstance(external_ip_result, dict) and 'stdout' in external_ip_result:
+            external_ip = external_ip_result['stdout']
+        else:
+            external_ip = str(external_ip_result)
         
         # Check for errors in IP retrieval
         if "Error" in local_ip or "Could not determine" in external_ip:
@@ -697,6 +708,58 @@ def list_tool_help() -> str:
 
 
 # Additional helper functions for working with tools
+
+def get_module_tools():
+    """
+    Get properly defined tool metadata for the network diagnostics module.
+    This ensures the chatbot understands the correct function signatures.
+    """
+    from core.tools_registry import ToolMetadata, ParameterInfo, ParameterType, ToolCategory
+    
+    return {
+        "check_nat_status": ToolMetadata(
+            name="check_nat_status",
+            function_name="check_nat_status", 
+            module_path="network_diagnostics",
+            description="Check if we are running behind NAT by comparing local and external IP addresses",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={},  # This function takes NO parameters
+            examples=["check_nat_status"]
+        ),
+        "get_local_ip": ToolMetadata(
+            name="get_local_ip",
+            function_name="get_local_ip",
+            module_path="network_diagnostics", 
+            description="Get the local IP address of this machine",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={},  # This function takes NO parameters
+            examples=["get_local_ip"]
+        ),
+        "get_external_ip": ToolMetadata(
+            name="get_external_ip",
+            function_name="get_external_ip",
+            module_path="network_diagnostics",
+            description="Get the external/public IP address",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={},  # This function takes NO parameters
+            examples=["get_external_ip"]
+        ),
+        "ping_target": ToolMetadata(
+            name="ping_target", 
+            function_name="ping_target",
+            module_path="network_diagnostics",
+            description="Ping a target host and measure response time",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={
+                "target": ParameterInfo(ParameterType.STRING, required=False, 
+                                      description="Target host to ping (default: 8.8.8.8)"),
+                "count": ParameterInfo(ParameterType.INTEGER, required=False, default=4,
+                                     description="Number of ping packets to send")
+            },
+            examples=["ping_target", "ping_target google.com", "ping_target 192.168.1.1 count=3"]
+        )
+    }
+
 
 def get_tool_details(tool_name: str) -> Dict[str, Any]:
     """

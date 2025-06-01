@@ -54,9 +54,10 @@ except ImportError:
 
 # Local imports
 try:
-    from network_diagnostics import get_available_tools, execute_tool
+    from core.tools_registry import get_tool_registry
+    from network_diagnostics import get_available_tools  # Legacy fallback for tool listing
 except ImportError:
-    print(f"{Fore.RED}Error: Network diagnostics module not found. Make sure network_diagnostics.py is in the same directory.{Style.RESET_ALL}")
+    print(f"{Fore.RED}Error: Tool registry or network diagnostics module not found.{Style.RESET_ALL}")
     sys.exit(1)
 
 # Configuration
@@ -306,7 +307,9 @@ def handle_command(command: str, cache: Dict[str, Any]) -> Tuple[bool, bool]:
         if tool_name in tools:
             print_tool_execution(tool_name)
             try:
-                result = execute_tool(tool_name)
+                # Use v3 tool registry for proper execution
+                registry = get_tool_registry()
+                result = registry.execute_tool(tool_name, {}, mode="manual")
                 print(f"{ASSISTANT_COLOR}Chatbot (tool completed): {TOOL_COLOR}Result:{Style.RESET_ALL} {result}")
 
                 # Update cache with the result
@@ -338,8 +341,10 @@ def start_interactive_session(model_name: str = DEFAULT_MODEL) -> None:
     conversation = [
         {
             "role": "system",
-            "content": """You are a network diagnostics specialist that helps troubleshoot connectivity issues.
-You have access to various networking tools that can be called to diagnose problems.
+            "content": """You are a network diagnostics and cybersecurity specialist working with an experienced security admin/pentester. 
+            You can also call tools for network diagnosis, security scanning, and for pentest reconnaissance.
+            You have access to various networking tools that can be called to diagnose problems or to do pentest reconnaissance and security scanning.
+            You are capable of reasoning about network and security issues, but you must use the tools to get real data.
 
 IMPORTANT: For any network-related questions about connectivity, DNS, ping, latency, IP addresses, routing, or network performance, you MUST use the appropriate tools to get real data. Do not guess or provide generic answers without using tools. Do not simulate or hallucinate data or tool results.
 
@@ -363,8 +368,9 @@ Examples of when you MUST use tools:
 - OS fingerprinting → use os_detection_scan
 - Comprehensive security scanning → use comprehensive_scan
 
-Always provide clear explanations of what the tools do and what the results mean.
-If you're unsure about a problem, suggest multiple possible diagnoses and how to confirm them using tools.
+Be direct, concise, and opinionated. Use technical shorthand. You are an expert conversing with another expert. 
+Skip basic explanations of common technologies. 
+Assume the user understands networking concepts, protocols, and security tools.
 """
         }
     ]
@@ -374,7 +380,27 @@ If you're unsure about a problem, suggest multiple possible diagnoses and how to
     tool_descriptions = []
     for name, func in tools.items():
         desc = func.__doc__.split('\n')[0].strip() if func.__doc__ else f"Tool: {name}"
-        tool_descriptions.append(f"- {name}: {desc}")
+        
+        # Get function signature to show parameters
+        import inspect
+        try:
+            sig = inspect.signature(func)
+            params = []
+            for param_name, param in sig.parameters.items():
+                if param.default == inspect.Parameter.empty:
+                    params.append(f"{param_name}")
+                else:
+                    params.append(f"{param_name}={param.default}")
+            
+            if params:
+                signature = f"({', '.join(params)})"
+            else:
+                signature = "()"
+            
+            tool_descriptions.append(f"- {name}{signature}: {desc}")
+        except Exception:
+            # Fallback if signature inspection fails
+            tool_descriptions.append(f"- {name}: {desc}")
 
     # Add tool descriptions to system message
     tool_system_message = {
@@ -433,8 +459,9 @@ If you're unsure about a problem, suggest multiple possible diagnoses and how to
                         print_tool_execution(tool_name)
 
                         try:
-                            # Execute the tool
-                            tool_result = execute_tool(tool_name, args)
+                            # Execute the tool using v3 registry (filters invalid parameters)
+                            registry = get_tool_registry()
+                            tool_result = registry.execute_tool(tool_name, args, mode="chatbot")
                             print(f"{ASSISTANT_COLOR}Chatbot (tool completed): {TOOL_COLOR}Result: \n{Style.RESET_ALL}{tool_result}")
 
                             # Update cache with result

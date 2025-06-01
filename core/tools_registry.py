@@ -74,6 +74,9 @@ class ToolRegistry:
             "memory",
             "core"
         ]
+        self._additional_modules = [
+            "network_diagnostics"  # Legacy module not in standard paths
+        ]
         
         # Initialize categories
         for category in ToolCategory:
@@ -206,6 +209,13 @@ class ToolRegistry:
                         
             except (ImportError, FileNotFoundError, AttributeError) as e:
                 print(f"Warning: Could not discover tools in {base_path}: {e}")
+        
+        # Discover additional standalone modules
+        for module_path in self._additional_modules:
+            try:
+                self.discover_module_tools(module_path)
+            except Exception as e:
+                print(f"Warning: Could not discover tools in {module_path}: {e}")
     
     def integrate_external_tools(self) -> None:
         """
@@ -335,7 +345,7 @@ class ToolRegistry:
         if not metadata:
             return create_error_response(
                 ErrorType.INPUT,
-                ErrorCode.INVALID_PARAMETER,
+                ErrorCode.INVALID_TARGET,
                 f"Tool '{tool_name}' not found",
                 tool_name="tool_registry"
             )
@@ -344,7 +354,7 @@ class ToolRegistry:
         if mode not in metadata.modes:
             return create_error_response(
                 ErrorType.INPUT,
-                ErrorCode.INVALID_PARAMETER,
+                ErrorCode.INVALID_TARGET,
                 f"Tool '{tool_name}' not available in {mode} mode",
                 tool_name="tool_registry"
             )
@@ -363,9 +373,15 @@ class ToolRegistry:
         if parameters is None:
             parameters = {}
         
+        # Filter parameters to only include those defined in metadata
+        filtered_parameters = {}
+        for param_name, param_value in parameters.items():
+            if param_name in metadata.parameters:
+                filtered_parameters[param_name] = param_value
+        
         # Validate required parameters
         for param_name, param_info in metadata.parameters.items():
-            if param_info.required and param_name not in parameters:
+            if param_info.required and param_name not in filtered_parameters:
                 return create_error_response(
                     ErrorType.INPUT,
                     ErrorCode.MISSING_PARAMETER,
@@ -376,7 +392,7 @@ class ToolRegistry:
         # Execute tool
         if metadata.function_ref:
             try:
-                result = metadata.function_ref(**parameters)
+                result = metadata.function_ref(**filtered_parameters)
                 return result
             except Exception as e:
                 return create_error_response(
