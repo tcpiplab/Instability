@@ -757,6 +757,15 @@ def get_module_tools():
                                      description="Number of ping packets to send")
             },
             examples=["ping_target", "ping_target google.com", "ping_target 192.168.1.1 count=3"]
+        ),
+        "get_os_info": ToolMetadata(
+            name="get_os_info",
+            function_name="get_os_info",
+            module_path="network_diagnostics",
+            description="Get information about the local operating system and environment (this machine)",
+            category=ToolCategory.SYSTEM_INFO,
+            parameters={},  # This function takes NO parameters
+            examples=["get_os_info"]
         )
     }
 

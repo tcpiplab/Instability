@@ -232,23 +232,30 @@ def parse_tool_call(content: str) -> Tuple[Optional[str], Optional[Dict[str, Any
         else:
             # No args specified
             tool_name = tool_part.split("\n")[0].strip()
+        
+        # Clean up tool name - remove parentheses if present (AI sometimes adds them)
+        if tool_name.endswith("()"):
+            tool_name = tool_name[:-2]
 
         # Extract args if present
         args = {}
         if "ARGS:" in tool_part:
             args_text = tool_part.split("ARGS:")[1].strip()
+            
+            # Take only the first line after ARGS: to avoid parsing fake tool results
+            args_line = args_text.split('\n')[0].strip()
 
             # Find the JSON part (everything between { and })
-            json_start = args_text.find("{")
+            json_start = args_line.find("{")
             if json_start >= 0:
-                json_end = args_text.rfind("}") + 1
+                json_end = args_line.rfind("}") + 1
                 if json_end > json_start:
-                    json_str = args_text[json_start:json_end]
+                    json_str = args_line[json_start:json_end]
                     try:
                         args = json.loads(json_str)
-                    except json.JSONDecodeError:
+                    except json.JSONDecodeError as e:
                         # Invalid JSON, use empty args
-                        print_error(f"Invalid JSON in args: {json_str}")
+                        print_error(f"Invalid JSON in args: {json_str} (Error: {e})")
                         args = {}
 
         return tool_name, args
@@ -346,12 +353,20 @@ def start_interactive_session(model_name: str = DEFAULT_MODEL) -> None:
             You have access to various networking tools that can be called to diagnose problems or to do pentest reconnaissance and security scanning.
             You are capable of reasoning about network and security issues, but you must use the tools to get real data.
 
-IMPORTANT: For any network-related questions about connectivity, DNS, ping, latency, IP addresses, routing, or network performance, you MUST use the appropriate tools to get real data. Do not guess or provide generic answers without using tools. Do not simulate or hallucinate data or tool results.
+IMPORTANT: For any network-related questions about connectivity, DNS, ping, latency, IP addresses, routing, or network performance, you MUST use the appropriate tools to get real data. Do not guess or provide generic answers without using tools. 
+
+CRITICAL: NEVER include fake tool results, sample data, or "Tool result:" text in your responses. Only call tools using the specified format and wait for the actual results.
 
 When you need specific information, you can call a tool using this format:
 
 TOOL: tool_name
 ARGS: {"arg_name": "value"} (or {} if no arguments needed)
+
+STOP after the tool call. Do NOT include any text like "Tool result:", example output, or sample data. The system will execute the tool and provide the real result.
+
+CONTEXT AWARENESS: When users ask about "we", "our machine", "this system", or "localhost", they mean the LOCAL machine you're running on. When they specify IP addresses or hostnames, they mean REMOTE targets.
+
+IMPORTANT: Do NOT use pentesting tools (nmap_scan, os_detection_scan, etc.) for questions about the local machine. Use local system tools instead.
 
 Examples of when you MUST use tools:
 - Questions about ping times or connectivity → use ping_target
@@ -362,10 +377,10 @@ Examples of when you MUST use tools:
 - General connectivity → use check_internet_connection or check_local_network
 - NAT questions → use check_nat_status
 - Speed or bandwidth questions → use run_speed_test
-- Questions about the local operating system → use get_os_info
-- Port scanning or service detection → use nmap_scan, quick_port_scan, service_version_scan
-- Network discovery or host discovery → use network_discovery
-- OS fingerprinting → use os_detection_scan
+- Questions about the local operating system (this machine, localhost) → use get_os_info
+- Port scanning or service detection on remote hosts → use nmap_scan, quick_port_scan, service_version_scan
+- Network discovery or host discovery on remote networks → use network_discovery
+- OS fingerprinting of remote hosts/targets → use os_detection_scan
 - Comprehensive security scanning → use comprehensive_scan
 
 Be direct, concise, and opinionated. Use technical shorthand. You are an expert conversing with another expert. 
