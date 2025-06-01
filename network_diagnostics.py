@@ -793,6 +793,33 @@ def get_module_tools():
             category=ToolCategory.WEB,
             parameters={},
             examples=["check_websites"]
+        ),
+        "check_dns_root_servers": ToolMetadata(
+            name="check_dns_root_servers",
+            function_name="check_dns_root_servers",
+            module_path="network_diagnostics",
+            description="Check if DNS root servers are reachable",
+            category=ToolCategory.DNS,
+            parameters={},
+            examples=["check_dns_root_servers"]
+        ),
+        "check_local_network": ToolMetadata(
+            name="check_local_network",
+            function_name="check_local_network",
+            module_path="network_diagnostics",
+            description="Check local network interfaces and link status",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={},
+            examples=["check_local_network"]
+        ),
+        "run_speed_test": ToolMetadata(
+            name="run_speed_test",
+            function_name="run_speed_test",
+            module_path="network_diagnostics",
+            description="Run a network speed test (macOS only)",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={},
+            examples=["run_speed_test"]
         )
     }
 
