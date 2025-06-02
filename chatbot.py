@@ -317,7 +317,10 @@ def handle_command(command: str, cache: Dict[str, Any]) -> Tuple[bool, bool]:
                 # Use v3 tool registry for proper execution
                 registry = get_tool_registry()
                 result = registry.execute_tool(tool_name, {}, mode="manual")
-                print(f"{ASSISTANT_COLOR}Chatbot (tool completed): {TOOL_COLOR}Result:{Style.RESET_ALL} {result}")
+                
+                # Extract concise result for display
+                display_result = _format_tool_result_concisely(result)
+                print(f"{ASSISTANT_COLOR}Chatbot (tool completed): {TOOL_COLOR}Result:{Style.RESET_ALL} {display_result}")
 
                 # Update cache with the result
                 cache[tool_name] = result
@@ -386,6 +389,10 @@ Examples of when you MUST use tools:
 Be direct, concise, and opinionated. Use technical shorthand. You are an expert conversing with another expert. 
 Skip basic explanations of common technologies. 
 Assume the user understands networking concepts, protocols, and security tools.
+
+CRITICAL: Keep all responses extremely brief. One to two sentences maximum. 
+When using tools, provide only essential context before the tool call - no lengthy explanations.
+After tool execution, interpret results concisely without repeating obvious information.
 """
         }
     ]
@@ -464,10 +471,10 @@ Assume the user understands networking concepts, protocols, and security tools.
 
                 if tool_name:
 
-                    # Display the assistant's first message, which always seems to be planning, or
-                    # explaining, but also hallucinating sometimes
-                    # print_assistant(content)
-                    print_planning(content)
+                    # Extract planning section concisely
+                    planning_content = _extract_planning_section(content)
+                    if planning_content:
+                        print_planning(planning_content)
 
                     # Check if the tool exists
                     if tool_name in tools:
@@ -477,7 +484,10 @@ Assume the user understands networking concepts, protocols, and security tools.
                             # Execute the tool using v3 registry (filters invalid parameters)
                             registry = get_tool_registry()
                             tool_result = registry.execute_tool(tool_name, args, mode="chatbot")
-                            print(f"{ASSISTANT_COLOR}Chatbot (tool completed): {TOOL_COLOR}Result: \n{Style.RESET_ALL}{tool_result}")
+                            
+                            # Extract concise result for display
+                            display_result = _format_tool_result_concisely(tool_result)
+                            print(f"{ASSISTANT_COLOR}Chatbot (tool completed): {TOOL_COLOR}Result:{Style.RESET_ALL} {display_result}")
 
                             # Update cache with result
                             cache[tool_name] = tool_result
@@ -553,6 +563,69 @@ Assume the user understands networking concepts, protocols, and security tools.
         print_error(f"Unexpected error: {Fore.RED}{e}{Style.RESET_ALL}")
 
     finally:
-
         # Save cache before exiting
         save_cache(cache)
+
+
+def _extract_planning_section(content: str) -> Optional[str]:
+    """Extract planning/reasoning section before tool call, keeping it concise"""
+    # Find the TOOL: line
+    tool_index = content.find("TOOL:")
+    if tool_index == -1:
+        return None
+    
+    # Get text before the tool call
+    planning_text = content[:tool_index].strip()
+    
+    # If planning text is too long, take first sentence or first 100 chars
+    if len(planning_text) > 100:
+        # Try to find first sentence
+        sentences = planning_text.split('. ')
+        if len(sentences) > 0 and len(sentences[0]) < 100:
+            return sentences[0] + '.'
+        else:
+            # Truncate to 100 chars
+            return planning_text[:97] + "..."
+    
+    return planning_text if planning_text else None
+
+
+def _format_tool_result_concisely(tool_result: Any) -> str:
+    """Format tool result concisely for chatbot display"""
+    if isinstance(tool_result, dict):
+        # Handle standardized v3 tool result format
+        if 'success' in tool_result:
+            if tool_result.get('success'):
+                # Show just the main output/result
+                if 'stdout' in tool_result and tool_result['stdout']:
+                    return tool_result['stdout']
+                elif 'parsed_data' in tool_result and tool_result['parsed_data']:
+                    data = tool_result['parsed_data']
+                    if isinstance(data, dict) and 'result' in data:
+                        return str(data['result'])
+                    return str(data)
+                else:
+                    return "Success"
+            else:
+                # Show error message concisely
+                error_msg = tool_result.get('error_message', 'Tool execution failed')
+                return f"Error: {error_msg}"
+        
+        # Handle error responses
+        elif 'error' in tool_result:
+            return f"Error: {tool_result['error']}"
+        
+        # For other dict types, try to find the most relevant content
+        elif 'stdout' in tool_result:
+            return tool_result['stdout']
+        elif 'result' in tool_result:
+            return str(tool_result['result'])
+        else:
+            # Fallback: show first few non-internal keys
+            relevant_data = {k: v for k, v in tool_result.items() 
+                           if not k.startswith('_') and k not in ['success', 'execution_time', 'timestamp', 'tool_name', 'command_executed', 'exit_code', 'options_used', 'stderr', 'error_type']}
+            if relevant_data:
+                return str(relevant_data)
+    
+    # For non-dict results, return as-is
+    return str(tool_result)
