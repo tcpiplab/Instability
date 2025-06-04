@@ -493,21 +493,28 @@ After tool execution, interpret results concisely without repeating obvious info
                             conversation.append({"role": "assistant", "content": content})
                             conversation.append({"role": "system", "content": f"Tool result: {tool_result}"})
 
-                            # Get follow-up response
-                            follow_up = ollama.chat(
+                            # Get follow-up response with streaming
+                            follow_up_stream = ollama.chat(
                                 model=model_name,
                                 messages=conversation,
-                                options={"temperature": 0.7}
+                                options={"temperature": 0.7},
+                                stream=True
                             )
 
-                            # Add and display follow-up
-                            conversation.append({"role": "assistant", "content": follow_up["message"]["content"]})
+                            # Collect streamed response and display in real-time
+                            print(f"{ASSISTANT_COLOR}Chatbot: {Style.RESET_ALL}", end="", flush=True)
+                            full_response = ""
+                            for chunk in follow_up_stream:
+                                content_chunk = chunk["message"]["content"]
+                                full_response += content_chunk
+                                print(content_chunk, end="", flush=True)
+                            print()  # New line when streaming is complete
 
-                            thinking, content = extract_thinking(follow_up["message"]["content"])
-                            if thinking:
-                                print_thinking(thinking)
-                            if content:
-                                print_assistant(content)
+                            # Add complete response to conversation
+                            conversation.append({"role": "assistant", "content": full_response})
+
+                            # Note: We don't extract thinking/planning from streamed responses
+                            # since they're typically just the final answer after tool execution
 
                         except Exception as e:
 
