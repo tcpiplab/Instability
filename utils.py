@@ -9,8 +9,12 @@ import os
 import sys
 import platform
 import time
+from datetime import datetime
 from typing import Dict, Any, Optional, List, Tuple
 from colorama import Fore, Style, init
+
+# Import centralized error handling
+from core.error_handling import ErrorType, ErrorCode, get_timeout
 
 # Import Rich for Markdown rendering if available
 try:
@@ -88,10 +92,6 @@ def print_tool_execution(tool_name: str):
     """Print a tool execution message"""
     print(f"{ASSISTANT_COLOR}Chatbot (executing tool): {TOOL_COLOR}{tool_name}{Style.RESET_ALL}")
 
-
-def print_tool_result(result: str):
-    """Print a tool execution result"""
-    print(f"{ASSISTANT_COLOR}Chatbot (tool completed): {TOOL_COLOR}Result: {Style.RESET_ALL}{result}")
 
 
 def print_error(message: str):
@@ -227,11 +227,11 @@ def format_tool_result(tool_name: str, result: str) -> str:
     # Truncate very long results
     truncated_result = truncate_long_output(result)
 
-    # Format with consistent style and markdown code blocks for monospace output
+    # Format with consistent style and Markdown code blocks for monospace output
     formatted = f"Tool: {tool_name}\n"
     formatted += "=" * (len(tool_name) + 6) + "\n"
     
-    # If the result looks like structured data or code, wrap it in a markdown code block
+    # If the result looks like structured data or code, wrap it in a Markdown code block
     if any(pattern in truncated_result for pattern in ['{', '}', '[', ']', ':', '|', '=', '/']):
         formatted += f"```\n{truncated_result}\n```"
     else:
@@ -333,3 +333,329 @@ def sanitize_command(command: str) -> str:
     command = command.replace(';', '')
 
     return command
+
+
+# Standardized Tool Result Format Functions
+def create_tool_result(
+    success: bool,
+    tool_name: str,
+    execution_time: float,
+    command_executed: str = "",
+    target: Optional[str] = None,
+    stdout: str = "",
+    stderr: str = "",
+    parsed_data: Optional[Dict[str, Any]] = None,
+    error_type: Optional[str] = None,
+    error_message: Optional[str] = None,
+    exit_code: int = 0,
+    options_used: Optional[Dict[str, Any]] = None,
+    start_time: Optional[datetime] = None,
+    **kwargs
+) -> Dict[str, Any]:
+    """
+    Create a standardized tool result dictionary following the v3 interface standard.
+    
+    Args:
+        success: Whether the tool executed successfully
+        tool_name: Name of the tool that was executed
+        execution_time: Total execution time in seconds
+        command_executed: Human-readable command or operation
+        target: Target of the operation (IP, hostname, etc.)
+        stdout: Raw stdout/primary output
+        stderr: Raw stderr/error output
+        parsed_data: Structured, tool-specific data
+        error_type: Error category ("network", "timeout", "execution", "invalid_target")
+        error_message: Human-readable error description
+        exit_code: Exit code (0 = success, >0 = error)
+        options_used: Parameters/options passed to the tool
+        start_time: Start timestamp (uses current time if not provided)
+        **kwargs: Additional tool-specific fields
+    
+    Returns:
+        Standardized tool result dictionary
+    """
+    if start_time is None:
+        start_time = datetime.now()
+    
+    result = {
+        # Core execution metadata (REQUIRED)
+        "success": success,
+        "execution_time": execution_time,
+        "timestamp": start_time.isoformat(),
+        "tool_name": tool_name,
+        
+        # Command/execution details (REQUIRED)
+        "command_executed": command_executed,
+        "exit_code": exit_code,
+        "target": target,
+        "options_used": options_used or {},
+        
+        # Output data (REQUIRED)
+        "stdout": stdout,
+        "stderr": stderr,
+        "parsed_data": parsed_data or {},
+        
+        # Error handling (REQUIRED)
+        "error_type": error_type,
+        "error_message": error_message,
+    }
+    
+    # Add any additional tool-specific fields
+    result.update(kwargs)
+    
+    return result
+
+
+def create_success_result(
+    tool_name: str,
+    execution_time: float,
+    parsed_data: Dict[str, Any],
+    command_executed: str = "",
+    target: Optional[str] = None,
+    stdout: str = "",
+    options_used: Optional[Dict[str, Any]] = None,
+    **kwargs
+) -> Dict[str, Any]:
+    """
+    Create a standardized successful tool result.
+    
+    Args:
+        tool_name: Name of the tool
+        execution_time: Execution time in seconds
+        parsed_data: Structured tool output
+        command_executed: Command that was executed
+        target: Target of the operation
+        stdout: Raw output
+        options_used: Options passed to the tool
+        **kwargs: Additional tool-specific fields
+        
+    Returns:
+        Standardized success result
+    """
+    return create_tool_result(
+        success=True,
+        tool_name=tool_name,
+        execution_time=execution_time,
+        command_executed=command_executed,
+        target=target,
+        stdout=stdout,
+        stderr="",
+        parsed_data=parsed_data,
+        error_type=None,
+        error_message=None,
+        exit_code=0,
+        options_used=options_used,
+        **kwargs
+    )
+
+
+def create_error_result(
+    tool_name: str,
+    execution_time: float,
+    error_message: str,
+    error_type: str = "execution",
+    command_executed: str = "",
+    target: Optional[str] = None,
+    stderr: str = "",
+    exit_code: int = 1,
+    options_used: Optional[Dict[str, Any]] = None,
+    **kwargs
+) -> Dict[str, Any]:
+    """
+    Create a standardized error tool result.
+    
+    Args:
+        tool_name: Name of the tool
+        execution_time: Execution time in seconds
+        error_message: Description of the error
+        error_type: Category of error ("network", "timeout", "execution", "invalid_target")
+        command_executed: Command that was attempted
+        target: Target of the operation
+        stderr: Raw error output
+        exit_code: Exit code (>0 for errors)
+        options_used: Options passed to the tool
+        **kwargs: Additional tool-specific fields
+        
+    Returns:
+        Standardized error result
+    """
+    # Try to map legacy error types to new ErrorType enum
+    error_type_mapping = {
+        "network": ErrorType.NETWORK,
+        "timeout": ErrorType.NETWORK,
+        "execution": ErrorType.EXECUTION,
+        "invalid_target": ErrorType.INPUT,
+        "system": ErrorType.SYSTEM,
+        "configuration": ErrorType.CONFIGURATION
+    }
+    
+    # Map to appropriate error code
+    error_code_mapping = {
+        "network": ErrorCode.CONNECTION_FAILED,
+        "timeout": ErrorCode.TIMEOUT,
+        "execution": ErrorCode.COMMAND_FAILED,
+        "invalid_target": ErrorCode.INVALID_TARGET,
+        "system": ErrorCode.UNEXPECTED_ERROR,
+        "configuration": ErrorCode.INVALID_CONFIG
+    }
+    
+    mapped_type = error_type_mapping.get(error_type, ErrorType.EXECUTION)
+    mapped_code = error_code_mapping.get(error_type, ErrorCode.UNEXPECTED_ERROR)
+    
+    # Import here to avoid circular import
+    from core.error_handling import create_error_response
+    
+    return create_error_response(
+        error_type=mapped_type,
+        error_code=mapped_code,
+        message=error_message,
+        tool_name=tool_name,
+        execution_time=execution_time,
+        target=target,
+        details={
+            "command": command_executed,
+            "stderr": stderr,
+            "exit_code": exit_code,
+            "options": options_used or {}
+        },
+        **kwargs
+    )
+
+
+def wrap_legacy_result(
+    tool_name: str,
+    legacy_result: Any,
+    execution_time: float,
+    command_executed: str = "",
+    target: Optional[str] = None,
+    options_used: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """
+    Wrap a legacy tool result (string, tuple, list) in the standardized format.
+    
+    Args:
+        tool_name: Name of the tool
+        legacy_result: The original result from the legacy tool
+        execution_time: Execution time in seconds
+        command_executed: Command that was executed
+        target: Target of the operation
+        options_used: Options passed to the tool
+        
+    Returns:
+        Standardized tool result
+    """
+    if isinstance(legacy_result, str):
+        return create_success_result(
+            tool_name=tool_name,
+            execution_time=execution_time,
+            parsed_data={"result": legacy_result},
+            command_executed=command_executed,
+            target=target,
+            stdout=legacy_result,
+            options_used=options_used
+        )
+    elif isinstance(legacy_result, (list, tuple)):
+        return create_success_result(
+            tool_name=tool_name,
+            execution_time=execution_time,
+            parsed_data={"result": list(legacy_result)},
+            command_executed=command_executed,
+            target=target,
+            stdout=str(legacy_result),
+            options_used=options_used
+        )
+    elif isinstance(legacy_result, dict):
+        return create_success_result(
+            tool_name=tool_name,
+            execution_time=execution_time,
+            parsed_data=legacy_result,
+            command_executed=command_executed,
+            target=target,
+            stdout=str(legacy_result),
+            options_used=options_used
+        )
+    else:
+        return create_success_result(
+            tool_name=tool_name,
+            execution_time=execution_time,
+            parsed_data={"result": str(legacy_result)},
+            command_executed=command_executed,
+            target=target,
+            stdout=str(legacy_result),
+            options_used=options_used
+        )
+
+
+def standardize_tool_output(tool_name: str = None):
+    """
+    Decorator to automatically wrap legacy tool functions with standardized output format.
+    
+    Args:
+        tool_name: Optional custom tool name (uses function name if not provided)
+        
+    Usage:
+        @standardize_tool_output()
+        def my_tool(target):
+            return "some result"
+    """
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            actual_tool_name = tool_name or func.__name__
+            start_time = datetime.now()
+            
+            try:
+                # Extract target from args/kwargs if present
+                target = None
+                if args:
+                    target = str(args[0]) if args[0] is not None else None
+                elif 'target' in kwargs:
+                    target = str(kwargs['target'])
+                elif 'host' in kwargs:
+                    target = str(kwargs['host'])
+                elif 'hostname' in kwargs:
+                    target = str(kwargs['hostname'])
+                
+                # Call the original function
+                legacy_result = func(*args, **kwargs)
+                execution_time = (datetime.now() - start_time).total_seconds()
+                
+                # Wrap result in standardized format
+                return wrap_legacy_result(
+                    tool_name=actual_tool_name,
+                    legacy_result=legacy_result,
+                    execution_time=execution_time,
+                    command_executed=f"{func.__name__}({', '.join(str(arg) for arg in args)})",
+                    target=target,
+                    options_used=kwargs
+                )
+                
+            except Exception as e:
+                execution_time = (datetime.now() - start_time).total_seconds()
+                
+                # Determine error type based on exception
+                error_type = "execution"
+                if "timeout" in str(e).lower():
+                    error_type = "timeout"
+                elif "connection" in str(e).lower() or "network" in str(e).lower():
+                    error_type = "network"
+                elif "permission" in str(e).lower() or "denied" in str(e).lower():
+                    error_type = "system"
+                elif "invalid" in str(e).lower() or "format" in str(e).lower():
+                    error_type = "invalid_target"
+                
+                return create_error_result(
+                    tool_name=actual_tool_name,
+                    execution_time=execution_time,
+                    error_message=str(e),
+                    error_type=error_type,
+                    command_executed=f"{func.__name__}({', '.join(str(arg) for arg in args)})",
+                    stderr=str(e),
+                    target=target
+                )
+        
+        # Preserve original function metadata
+        wrapper.__name__ = func.__name__
+        wrapper.__doc__ = func.__doc__
+        
+        return wrapper
+    return decorator

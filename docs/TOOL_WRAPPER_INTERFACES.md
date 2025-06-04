@@ -2,23 +2,57 @@
 
 ## Core Design Principles
 
-All tool wrappers follow a consistent function-based interface pattern:
+All tool wrappers in Instability v3 follow a consistent function-based interface pattern:
 - **Functions, not classes** - Each tool is wrapped by a simple function
-- **Standardized signatures** - Consistent parameter and return patterns
-- **Plain data structures** - Dictionaries and lists, no custom objects
-- **Graceful error handling** - Tools should never crash the chatbot
+- **Standardized return formats** - All tools use the v3 standard result format
+- **Automatic standardization** - Legacy tools upgraded via `@standardize_tool_output()` decorator
+- **Centralized configuration** - Timeouts, servers, and constants from `config.py`
+- **Enhanced error handling** - Contextual error messages with actionable suggestions
+- **Unified registry** - Automatic tool discovery with rich metadata
 
-## Standard Tool Function Signature
+## Tool Development Approaches
 
+### Approach 1: Simple Decorator (Recommended for most tools)
 ```python
+from utils import standardize_tool_output
+from config import get_timeout
+
+@standardize_tool_output()
 def tool_name(
-    target: str = None,
+    target: str,
+    options: str = "default",
+    silent: bool = False
+) -> str:
+    """
+    Execute a tool with automatic standardization.
+    
+    Args:
+        target: Primary target (IP, domain, URL, etc.)
+        options: Tool-specific options 
+        silent: If True, suppress all output except errors
+        
+    Returns:
+        String result (automatically wrapped in standard format)
+    """
+    timeout = get_timeout("tool_category")  # Use centralized config
+    # Implementation here
+    return "tool result"
+```
+
+### Approach 2: Full v3 Standard Interface
+```python
+from core.error_handling import create_network_error, ErrorCode
+from utils import create_success_result
+from config import get_timeout
+
+def tool_name(
+    target: str,
     options: Dict[str, Any] = None,
     silent: bool = False,
     timeout: int = None
 ) -> Dict[str, Any]:
     """
-    Execute a tool with standardized interface.
+    Execute a tool with full v3 interface.
     
     Args:
         target: Primary target (IP, domain, URL, etc.)
@@ -27,8 +61,25 @@ def tool_name(
         timeout: Override default timeout in seconds
         
     Returns:
-        Standardized result dictionary (see TOOL_RESULT_FORMAT below)
+        Standardized v3 result dictionary
     """
+    start_time = datetime.now()
+    if timeout is None:
+        timeout = get_timeout("tool_category")
+    
+    try:
+        result = perform_operation(target, options, timeout)
+        return create_success_result(
+            tool_name="tool_name",
+            execution_time=(datetime.now() - start_time).total_seconds(),
+            parsed_data=result,
+            target=target,
+            options_used=options
+        )
+    except TimeoutError:
+        return create_network_error(ErrorCode.TIMEOUT, target=target, timeout=timeout)
+    except Exception as e:
+        return create_network_error(ErrorCode.CONNECTION_FAILED, target=target)
 ```
 
 ## Tool Categories and Signatures
@@ -248,25 +299,121 @@ All tool functions return a dictionary with this structure:
 }
 ```
 
-## Error Types
+## Enhanced Error Handling
 
-Standard error types for consistent error handling:
+### Error Categories and Codes
+Instability v3 uses a structured error taxonomy with contextual messages and actionable suggestions:
 
-- `"not_found"` - Tool not installed or not in PATH
-- `"timeout"` - Tool execution exceeded timeout
-- `"execution"` - Tool ran but returned non-zero exit code
-- `"parsing"` - Tool ran successfully but output couldn't be parsed
-- `"permission"` - Insufficient permissions to run tool
-- `"network"` - Network connectivity issues
-- `"invalid_target"` - Target format is invalid
-- `"invalid_options"` - Tool options are invalid
+**Network Errors** (`ErrorType.NETWORK`):
+- `CONNECTION_FAILED` - Failed to establish connection to target
+- `TIMEOUT` - Operation timed out after specified duration  
+- `DNS_RESOLUTION` - Failed to resolve hostname
+- `UNREACHABLE` - Target appears to be unreachable
+
+**System Errors** (`ErrorType.SYSTEM`):
+- `TOOL_MISSING` - Required tool not found on system
+- `PERMISSION_DENIED` - Insufficient permissions for operation
+- `INVALID_PLATFORM` - Operation not supported on this platform
+
+**Input Errors** (`ErrorType.INPUT`):
+- `INVALID_TARGET` - Target format is invalid
+- `INVALID_PORT` - Port specification is invalid
+- `MISSING_PARAMETER` - Required parameter not provided
+
+**Execution Errors** (`ErrorType.EXECUTION`):
+- `COMMAND_FAILED` - Command execution failed
+- `PARSING_ERROR` - Could not parse tool output
+- `UNEXPECTED_ERROR` - Unexpected runtime error
+
+### Error Response Format
+```python
+{
+    "success": False,
+    "error": {
+        "type": "network",
+        "code": "timeout", 
+        "message": "Operation timed out after 30s",
+        "suggestions": [
+            "Check your internet connection",
+            "Try increasing timeout value",
+            "Verify target is reachable manually"
+        ],
+        "timestamp": "2024-01-15T10:30:00Z"
+    },
+    "tool_name": "ping_host",
+    "execution_time": 30.0,
+    "target": "192.168.1.1"
+}
+```
+
+## Tool Registry Integration
+
+### Automatic Discovery with get_module_tools()
+For full registry integration, add this function to your module:
+
+```python
+def get_module_tools():
+    from core.tools_registry import ToolMetadata, ParameterInfo, ParameterType, ToolCategory
+    
+    return {
+        "tool_name": ToolMetadata(
+            name="tool_name",
+            function_name="tool_function",
+            module_path="network.my_module",
+            description="Tool description for help text",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={
+                "target": ParameterInfo(
+                    param_type=ParameterType.STRING,
+                    required=True,
+                    description="Target IP or hostname"
+                ),
+                "scan_type": ParameterInfo(
+                    param_type=ParameterType.STRING,
+                    required=False,
+                    default="basic",
+                    choices=["basic", "comprehensive"],
+                    description="Type of scan to perform"
+                )
+            },
+            modes=["manual", "chatbot"],
+            aliases=["alt_name", "short_name"],
+            examples=[
+                "tool_name 192.168.1.1",
+                "tool_name example.com comprehensive"
+            ]
+        )
+    }
+```
+
+### Registry Usage
+```python
+from core.tools_registry import get_tool_registry
+
+registry = get_tool_registry()
+
+# Get all available tools
+tools = registry.get_available_tools(mode="manual")
+
+# Execute a tool
+result = registry.execute_tool("resolve_hostname", {"hostname": "google.com"})
+
+# Get help for a tool
+help_text = registry.get_tool_help("resolve_hostname")
+
+# List tools by category
+dns_tools = registry.get_available_tools(category=ToolCategory.DNS)
+```
 
 ## Implementation Guidelines
 
-1. **Use subprocess for external tools** - All external commands via subprocess with proper timeout handling
-2. **Capture both stdout and stderr** - Always capture both for debugging
-3. **Parse output when possible** - Extract structured data from tool output
-4. **Handle timeouts gracefully** - Kill processes that exceed timeout
-5. **Validate inputs** - Check targets and options before execution
-6. **Log command execution** - Always log the exact command being run
-7. **Cross-platform compatibility** - Handle Windows vs Unix differences
+1. **Use centralized configuration** - Get timeouts, servers, ports from `config.py`
+2. **Leverage error handling** - Use appropriate error types and codes from `core.error_handling`
+3. **Use subprocess for external tools** - All external commands via subprocess with proper timeout handling
+4. **Capture both stdout and stderr** - Always capture both for debugging
+5. **Parse output when possible** - Extract structured data from tool output
+6. **Handle timeouts gracefully** - Kill processes that exceed timeout
+7. **Validate inputs** - Use `ErrorRecovery.validate_target()` and similar helpers
+8. **Cross-platform compatibility** - Handle Windows vs Unix differences
+9. **Add rich metadata** - Include examples, aliases, and parameter descriptions
+10. **Test both approaches** - Ensure tools work with decorator and full interface

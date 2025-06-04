@@ -14,11 +14,27 @@ import socket
 import subprocess
 import platform
 import json
+import time
+from datetime import datetime
 from typing import Dict, Any, Callable, Optional, List
 from colorama import Fore, Style
 
 # Import migrated tools from network_tools package
 from network_tools import check_external_ip_main, get_public_ip, web_check_main, resolver_check_main, monitor_dns_resolvers, dns_check_main
+
+# Import standardized tool result functions
+from utils import create_success_result, create_error_result, wrap_legacy_result, standardize_tool_output
+
+# Import centralized configuration
+from config import get_dns_servers, DNS_TEST_SERVERS, COMMON_PORTS
+
+# Import v3 pentest tools
+try:
+    from pentest.nmap_wrapper import run_nmap_scan, quick_port_scan, network_discovery, service_version_scan, os_detection_scan, comprehensive_scan
+    PENTEST_TOOLS_AVAILABLE = True
+except ImportError as e:
+    print(f"{Fore.YELLOW}Warning: Pentest tools not available: {e}{Style.RESET_ALL}")
+    PENTEST_TOOLS_AVAILABLE = False
 
 # Add parent directory to path to allow importing from original modules
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -45,37 +61,74 @@ except ImportError as e:
 
 # Basic tool implementations (fallbacks if original tools are not available)
 
-def get_os_info() -> str:
+def get_os_info() -> Dict[str, Any]:
     """Get information about the operating system and environment"""
-    if ORIGINAL_TOOLS_AVAILABLE:
-        try:
-            return get_os_type()
-        except Exception as e:
-            print(f"{Fore.YELLOW}Error using original get_os_type: {e}{Style.RESET_ALL}")
+    start_time = datetime.now()
+    
+    try:
+        if ORIGINAL_TOOLS_AVAILABLE:
+            try:
+                legacy_result = get_os_type()
+                execution_time = (datetime.now() - start_time).total_seconds()
+                return wrap_legacy_result(
+                    tool_name="get_os_info",
+                    legacy_result=legacy_result,
+                    execution_time=execution_time,
+                    command_executed="get_os_type() (original tool)"
+                )
+            except Exception as e:
+                print(f"{Fore.YELLOW}Error using original get_os_type: {e}{Style.RESET_ALL}")
 
-    # Fallback implementation
-    system = platform.system()
-    release = platform.release()
-    version = platform.version()
-    machine = platform.machine()
-    processor = platform.processor()
+        # Fallback implementation
+        system = platform.system()
+        release = platform.release()
+        version = platform.version()
+        machine = platform.machine()
+        processor = platform.processor()
+        
+        result_str = f"{system} {release} ({version}) {machine} {processor}"
+        execution_time = (datetime.now() - start_time).total_seconds()
+        
+        return create_success_result(
+            tool_name="get_os_info",
+            execution_time=execution_time,
+            command_executed="platform.system() + details",
+            parsed_data={
+                "system": system,
+                "release": release,
+                "version": version,
+                "machine": machine,
+                "processor": processor,
+                "summary": result_str
+            },
+            stdout=result_str
+        )
+    except Exception as e:
+        execution_time = (datetime.now() - start_time).total_seconds()
+        return create_error_result(
+            tool_name="get_os_info",
+            execution_time=execution_time,
+            error_message=f"Failed to get OS info: {str(e)}",
+            error_type="execution",
+            command_executed="platform module calls"
+        )
 
-    return f"{system} {release} ({version}) {machine} {processor}"
 
-
+@standardize_tool_output()
 def get_local_ip() -> str:
     """Get the local IP address of this machine"""
     try:
         # Create a socket to get the local IP
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             # Connect to a public IP (doesn't actually send packets)
-            s.connect(("8.8.8.8", 80))
+            s.connect((DNS_TEST_SERVERS[0], 80))
             local_ip = s.getsockname()[0]
         return local_ip
     except Exception as e:
-        return f"Error getting local IP: {e}"
+        return f"Error getting local IP: {Fore.RED}{e}{Style.RESET_ALL}"
 
 
+@standardize_tool_output()
 def get_external_ip() -> str:
     """Get the external/public IP address"""
     # Use the migrated check_external_ip module
@@ -86,16 +139,18 @@ def get_external_ip() -> str:
         return "Could not determine external IP (offline or no connectivity)"
 
 
+@standardize_tool_output()
 def check_internet_connection() -> str:
     """Check if the internet is reachable"""
     try:
         # Try to connect to a reliable server
-        socket.create_connection(("8.8.8.8", 53), timeout=3)
+        socket.create_connection((DNS_TEST_SERVERS[0], 53), timeout=3)
         return "Connected"
     except Exception:
         return "Disconnected"
 
 
+@standardize_tool_output()
 def check_dns_resolvers() -> str:
     """Check if DNS resolvers are working properly"""
     # Use the migrated resolver_check module
@@ -105,12 +160,12 @@ def check_dns_resolvers() -> str:
         print(f"{Fore.YELLOW}Error using migrated DNS resolver check: {e}{Style.RESET_ALL}")
         
         # Fallback implementation if the migrated module fails
-        resolvers = {
-            "Google Public DNS": "8.8.8.8",
-            "Cloudflare DNS": "1.1.1.1",
-            "Quad9 DNS": "9.9.9.9",
-            "OpenDNS": "208.67.222.222"
-        }
+        # Use centralized DNS server configuration
+        all_servers = get_dns_servers(include_additional=True)
+        resolver_names = ["Google Public DNS", "Cloudflare DNS", "OpenDNS", "Quad9 DNS", "Google Secondary", "Cloudflare Secondary", "OpenDNS Secondary"]
+        resolvers = {}
+        for i, server in enumerate(all_servers[:len(resolver_names)]):
+            resolvers[resolver_names[i]] = server
 
         results = []
         for name, ip in resolvers.items():
@@ -123,20 +178,30 @@ def check_dns_resolvers() -> str:
         return "\n".join(results)
 
 
-def ping_target(host: str = "8.8.8.8", target: str = None, count: int = 4) -> str:
+@standardize_tool_output()
+def ping_target(host: str = None, target: str = None, arg_name: str = None, count: int = 4) -> str:
     """Ping a target host and measure response time
     
     Args:
         host: Target host to ping (default: 8.8.8.8)
         target: Alternative parameter name for host (for compatibility)
+        arg_name: Generic parameter name used by chatbot (for compatibility)
         count: Number of ping packets to send (default: 4)
     
     Returns:
         String containing ping results
     """
     try:
-        # Allow either 'host' or 'target' parameter (target takes precedence if both are provided)
-        destination = target if target is not None else host
+        # Allow multiple parameter names (precedence: arg_name > target > host)
+        if arg_name is not None:
+            destination = arg_name
+        elif target is not None:
+            destination = target
+        elif host is not None:
+            destination = host
+        else:
+            # Use default DNS server from configuration
+            destination = DNS_TEST_SERVERS[0]
         
         # Determine command based on operating system
         if platform.system().lower() == "windows":
@@ -164,9 +229,10 @@ def ping_target(host: str = "8.8.8.8", target: str = None, count: int = 4) -> st
     except subprocess.TimeoutExpired:
         return f"Ping to {destination} timed out after 10 seconds"
     except Exception as e:
-        return f"Error pinging {destination}: {e}"
+        return f"Error pinging {destination}: {Fore.RED}{e}{Style.RESET_ALL}"
 
 
+@standardize_tool_output()
 def check_dns_root_servers() -> str:
     """Check if DNS root servers are reachable"""
     # Use the migrated dns_check module
@@ -196,6 +262,7 @@ def check_dns_root_servers() -> str:
         return "\n".join(results)
 
 
+@standardize_tool_output()
 def check_websites() -> str:
     """Check if major websites are reachable"""
     # Use the migrated web_check module
@@ -231,6 +298,7 @@ def check_websites() -> str:
         return "\n".join(results)
 
 
+@standardize_tool_output()
 def check_local_network() -> str:
     """Check local network interfaces and link status"""
     if ORIGINAL_TOOLS_AVAILABLE:
@@ -256,9 +324,10 @@ def check_local_network() -> str:
         else:
             return f"Unsupported platform: {platform.system()}"
     except Exception as e:
-        return f"Error checking local network: {e}"
+        return f"Error checking local network: {Fore.RED}{e}{Style.RESET_ALL}"
 
 
+@standardize_tool_output()
 def check_whois_servers() -> str:
     """Check if WHOIS servers are reachable"""
     if ORIGINAL_TOOLS_AVAILABLE:
@@ -308,6 +377,7 @@ def is_private_ip(ip: str) -> bool:
         return False
 
 
+@standardize_tool_output()
 def check_nat_status() -> str:
     """Check if we are running behind NAT by comparing local and external IP addresses.
     
@@ -315,9 +385,20 @@ def check_nat_status() -> str:
         Detailed analysis including NAT status confirmation and labeled IP addresses
     """
     try:
-        # Get local and external IP addresses
-        local_ip = get_local_ip()
-        external_ip = get_external_ip()
+        # Get local and external IP addresses - extract actual IPs from standardized results
+        local_ip_result = get_local_ip()
+        external_ip_result = get_external_ip()
+        
+        # Extract the actual IP addresses from the standardized result format
+        if isinstance(local_ip_result, dict) and 'stdout' in local_ip_result:
+            local_ip = local_ip_result['stdout']
+        else:
+            local_ip = str(local_ip_result)
+            
+        if isinstance(external_ip_result, dict) and 'stdout' in external_ip_result:
+            external_ip = external_ip_result['stdout']
+        else:
+            external_ip = str(external_ip_result)
         
         # Check for errors in IP retrieval
         if "Error" in local_ip or "Could not determine" in external_ip:
@@ -348,9 +429,10 @@ def check_nat_status() -> str:
         return "\n".join(result)
             
     except Exception as e:
-        return f"Error checking NAT status: {e}"
+        return f"Error checking NAT status: {Fore.RED}{e}{Style.RESET_ALL}"
 
 
+@standardize_tool_output()
 def run_speed_test() -> str:
     """Use this tool to run a speed test.
     This speed test tool will first check to make sure we are running macOS, also called Darwin.
@@ -422,6 +504,7 @@ def parse_network_quality_output(output: str) -> dict:
     return summary
 
 
+@standardize_tool_output()
 def generate_speed_test_report(summary: dict) -> str:
     """Generate a human-readable report from speed test results
     
@@ -461,6 +544,7 @@ def generate_speed_test_report(summary: dict) -> str:
     return "\n".join(report)
 
 
+@standardize_tool_output()
 def compare_speed_to_telecom(speed_mbps: float) -> str:
     """Compare a network speed to common telecom reference points
     
@@ -526,6 +610,42 @@ def get_available_tools() -> Dict[str, Callable]:
         "run_speed_test": run_speed_test
     }
 
+    # Add pentest tools if available
+    if PENTEST_TOOLS_AVAILABLE:
+        # Create wrapper functions that provide better descriptions for the chatbot
+        def nmap_scan_wrapper(target: str, scan_type: str = "basic", ports: str = None, **kwargs):
+            """Run nmap scan with specified parameters. Requires target IP/hostname."""
+            return run_nmap_scan(target=target, scan_type=scan_type, ports=ports, **kwargs)
+        
+        def quick_port_scan_wrapper(target: str, ports: str = "80,443,22,21,25,53,110,143,993,995", **kwargs):
+            """Quick port scan for common services. Requires target IP/hostname."""
+            return quick_port_scan(target=target, ports=ports, **kwargs)
+        
+        def network_discovery_wrapper(network: str, **kwargs):
+            """Discover live hosts on a network. Requires network in CIDR notation (e.g., 192.168.1.0/24)."""
+            return network_discovery(network=network, **kwargs)
+        
+        def service_version_scan_wrapper(target: str, ports: str = None, **kwargs):
+            """Scan for service versions on open ports. Requires target IP/hostname."""
+            return service_version_scan(target=target, ports=ports, **kwargs)
+        
+        def os_detection_scan_wrapper(target: str, **kwargs):
+            """Attempt to detect target operating system. Requires target IP/hostname."""
+            return os_detection_scan(target=target, **kwargs)
+        
+        def comprehensive_scan_wrapper(target: str, **kwargs):
+            """Comprehensive scan with service detection and OS fingerprinting. Requires target IP/hostname."""
+            return comprehensive_scan(target=target, **kwargs)
+        
+        tools.update({
+            "nmap_scan": nmap_scan_wrapper,
+            "quick_port_scan": quick_port_scan_wrapper,
+            "network_discovery": network_discovery_wrapper,
+            "service_version_scan": service_version_scan_wrapper,
+            "os_detection_scan": os_detection_scan_wrapper,
+            "comprehensive_scan": comprehensive_scan_wrapper
+        })
+
     # Add more original tools if available - example of how to add more
     if ORIGINAL_TOOLS_AVAILABLE:
         try:
@@ -566,6 +686,7 @@ def execute_tool(tool_name: str, args: Optional[Dict[str, Any]] = None) -> Any:
         return tool_func()
 
 
+@standardize_tool_output()
 def list_tool_help() -> str:
     """
     List all available tools with their descriptions
@@ -587,6 +708,130 @@ def list_tool_help() -> str:
 
 
 # Additional helper functions for working with tools
+
+def get_module_tools():
+    """
+    Get properly defined tool metadata for the network diagnostics module.
+    This ensures the chatbot understands the correct function signatures.
+    """
+    from core.tools_registry import ToolMetadata, ParameterInfo, ParameterType, ToolCategory
+    
+    return {
+        "check_nat_status": ToolMetadata(
+            name="check_nat_status",
+            function_name="check_nat_status", 
+            module_path="network_diagnostics",
+            description="Check if we are running behind NAT by comparing local and external IP addresses",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={},  # This function takes NO parameters
+            examples=["check_nat_status"]
+        ),
+        "get_local_ip": ToolMetadata(
+            name="get_local_ip",
+            function_name="get_local_ip",
+            module_path="network_diagnostics", 
+            description="Get the local IP address of this machine",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={},  # This function takes NO parameters
+            examples=["get_local_ip"]
+        ),
+        "get_external_ip": ToolMetadata(
+            name="get_external_ip",
+            function_name="get_external_ip",
+            module_path="network_diagnostics",
+            description="Get the external/public IP address",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={},  # This function takes NO parameters
+            examples=["get_external_ip"]
+        ),
+        "ping_target": ToolMetadata(
+            name="ping_target", 
+            function_name="ping_target",
+            module_path="network_diagnostics",
+            description="Ping a target host and measure response time",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={
+                "target": ParameterInfo(ParameterType.STRING, required=False, 
+                                      description="Target host to ping (default: 8.8.8.8)"),
+                "count": ParameterInfo(ParameterType.INTEGER, required=False, default=4,
+                                     description="Number of ping packets to send")
+            },
+            examples=["ping_target", "ping_target google.com", "ping_target 192.168.1.1 count=3"]
+        ),
+        "get_os_info": ToolMetadata(
+            name="get_os_info",
+            function_name="get_os_info",
+            module_path="network_diagnostics",
+            description="Get information about the local operating system and environment (this machine)",
+            category=ToolCategory.SYSTEM_INFO,
+            parameters={},  # This function takes NO parameters
+            examples=["get_os_info"]
+        ),
+        "check_internet_connection": ToolMetadata(
+            name="check_internet_connection",
+            function_name="check_internet_connection",
+            module_path="network_diagnostics",
+            description="Check if the internet is reachable from this machine",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={},  # This function takes NO parameters
+            examples=["check_internet_connection"]
+        ),
+        "check_dns_resolvers": ToolMetadata(
+            name="check_dns_resolvers",
+            function_name="check_dns_resolvers",
+            module_path="network_diagnostics",
+            description="Check if DNS resolvers are working properly",
+            category=ToolCategory.DNS,
+            parameters={},
+            examples=["check_dns_resolvers"]
+        ),
+        "check_websites": ToolMetadata(
+            name="check_websites",
+            function_name="check_websites",
+            module_path="network_diagnostics",
+            description="Check if major websites are reachable",
+            category=ToolCategory.WEB,
+            parameters={},
+            examples=["check_websites"]
+        ),
+        "check_dns_root_servers": ToolMetadata(
+            name="check_dns_root_servers",
+            function_name="check_dns_root_servers",
+            module_path="network_diagnostics",
+            description="Check if DNS root servers are reachable",
+            category=ToolCategory.DNS,
+            parameters={},
+            examples=["check_dns_root_servers"]
+        ),
+        "check_local_network": ToolMetadata(
+            name="check_local_network",
+            function_name="check_local_network",
+            module_path="network_diagnostics",
+            description="Check local network interfaces and link status",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={},
+            examples=["check_local_network"]
+        ),
+        "run_speed_test": ToolMetadata(
+            name="run_speed_test",
+            function_name="run_speed_test",
+            module_path="network_diagnostics",
+            description="Run a network speed test (macOS only)",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={},
+            examples=["run_speed_test"]
+        ),
+        "check_whois_servers": ToolMetadata(
+            name="check_whois_servers",
+            function_name="check_whois_servers",
+            module_path="network_diagnostics",
+            description="Check if WHOIS servers are reachable",
+            category=ToolCategory.WEB,
+            parameters={},
+            examples=["check_whois_servers"]
+        )
+    }
+
 
 def get_tool_details(tool_name: str) -> Dict[str, Any]:
     """

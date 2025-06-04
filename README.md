@@ -30,7 +30,7 @@ Instability v3 builds upon v2 with enhanced functionality and improved architect
 
 ### Requirements
 
-- Python 3.7 or higher
+- Python 3.11 or higher
 - [Ollama](https://ollama.ai/) installed and running locally
 - An Ollama model installed (default: `phi3:14b`, but any compatible model can be used)
 
@@ -76,6 +76,8 @@ python instability.py chatbot --model qwen3:8b
 python instability.py chatbot
 ```
 
+The chatbot automatically runs the v3 4-phase startup sequence before launching, providing comprehensive environment assessment and tool inventory.
+
 You can specify a different Ollama model using the `--model` or `-m` option:
 
 ```bash
@@ -92,22 +94,39 @@ The default model is `phi3:14b` if no model is specified.
 python instability.py manual [tool_name]
 ```
 
+Available tools are organized into categories:
+- **Network Diagnostics**: ping, dns_check, web_check, network_scan
+- **Pentesting**: nmap_scan, port_scan, host_discovery  
+- **System Info**: system_info, interface_status, tool_inventory
+
 To see a list of available tools:
 
 ```bash
 python instability.py manual
 ```
 
-To run all tools:
+To run comprehensive diagnostics:
 
 ```bash
 python instability.py manual all
 ```
 
-### Testing the Environment
+### Testing the Environment (v3 Startup Sequence)
 
 ```bash
 python instability.py test
+```
+
+This runs the comprehensive v3 4-phase startup sequence:
+1. **Core System Verification** - OS detection, Ollama connectivity, network interfaces, local IP
+2. **Internet Connectivity Assessment** - External IP detection, DNS resolution, web services
+3. **Pentesting Tool Inventory** - Scan for nmap, nuclei, httpx, feroxbuster, etc.
+4. **Target Scope Configuration** - Memory and scope management (partially implemented)
+
+### Running Tests
+
+```bash
+python instability.py run-tests
 ```
 
 ### Getting Help
@@ -175,15 +194,82 @@ This implementation follows these key principles:
 
 ## Extending the Tools
 
-To add a new tool in v3:
+To add a new tool in v3, you have two approaches:
 
-1. **Network Tools**: Add to appropriate module in `network/`
-2. **Pentesting Tools**: Add wrapper to `pentest/` module
-3. **Tool Detection**: Update `pentest/tool_detector.py` with detection logic
-4. **Configuration**: Add tool paths to `config.py`
-5. **Registration**: Add to module's `__init__.py` for automatic discovery
+### Option 1: Simple Decorator Approach (Recommended for basic tools)
+```python
+from utils import standardize_tool_output
 
-The tool will automatically be available to the chatbot, manual mode, and startup inventory.
+@standardize_tool_output()
+def my_new_tool(target: str, option: str = "default") -> str:
+    """Tool description"""
+    # Your tool implementation
+    return "tool result"
+```
+
+### Option 2: Full Registry Integration (Recommended for complex tools)
+1. **Add your function** to the appropriate module in `network/`, `pentest/`, etc.
+2. **Create get_module_tools()** function in your module:
+```python
+def get_module_tools():
+    from core.tools_registry import ToolMetadata, ParameterInfo, ParameterType, ToolCategory
+    return {
+        "my_tool": ToolMetadata(
+            name="my_tool",
+            function_name="my_new_tool", 
+            module_path="network.my_module",
+            description="Tool description",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={
+                "target": ParameterInfo(ParameterType.STRING, required=True),
+                "option": ParameterInfo(ParameterType.STRING, default="default")
+            }
+        )
+    }
+```
+3. **External Tools**: Update `pentest/tool_detector.py` if it's an external dependency
+4. **Configuration**: Add any constants to `config.py`
+
+The tool will automatically be discovered and available in both chatbot and manual modes.
+
+## Current Implementation Status
+
+### ☑︎ Fully Functional
+- **4-phase startup sequence** - Complete system assessment
+- **Manual tool execution** - All listed tools working  
+- **Chatbot integration** - v3 startup sequence integrated
+- **Tool inventory** - Detection of external pentesting tools
+- **Network diagnostics** - Layer 2/3, DNS, web connectivity testing
+- **Basic pentesting tools** - nmap integration and wrappers
+- **Cross-platform support** - Windows, Linux, macOS compatibility
+- **Graceful degradation** - Functions without internet/Ollama
+- **Unified tool interfaces** - Standardized return formats across all tools
+- **Centralized configuration** - All constants and settings in config.py
+- **Enhanced error handling** - Contextual error messages with actionable suggestions
+- **Automatic tool registration** - Plugin-style architecture with metadata
+
+### ⚠ Partially Implemented  
+- **Memory system** - Framework in place, markdown files defined but not fully functional
+- **Target scope management** - Basic structure exists, needs full implementation
+- **Advanced pentesting features** - Some tools need expanded functionality
+
+### [PLANNED] Features
+- Additional pentesting tool wrappers (nuclei, httpx, feroxbuster full integration)
+- Enhanced memory persistence and session tracking
+- Advanced target scope and engagement management
+- Web-based interface option
+
+## TODO
+
+- Add a `/think` command to allow the user to tell the chatbot to think about a problem before responding or calling 
+  any tools.
+- Add tool to make sure nmap can scan the local network
+- Add IP address geolocation lookup tool
+- Add tool for checking local CIDR mask and save to memory
+- Add tools for checking local IP default gateway IP address and save to memory
+- Add tool for looking up local MAC address and save to memory
+- Add tool for displaying ARP table
+- Add MAC address manufacturer lookup tool (using hardcoded/pre-downloaded list for offline operation)
 
 ## Troubleshooting
 

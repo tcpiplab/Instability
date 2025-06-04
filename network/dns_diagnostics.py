@@ -8,8 +8,13 @@ Part of the instability.py v3 network diagnostics suite.
 import socket
 import subprocess
 import platform
+import time
+from datetime import datetime
 from typing import Dict, Any, List, Optional
 from colorama import Fore
+
+# Import standardized tool result functions
+from utils import create_success_result, create_error_result
 
 def resolve_hostname(hostname: str, record_type: str = "A", silent: bool = False) -> Dict[str, Any]:
     """
@@ -352,3 +357,151 @@ def _extract_ip_from_output(output: str) -> Optional[str]:
     ip_pattern = r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b'
     matches = re.findall(ip_pattern, output)
     return matches[0] if matches else None
+
+
+def get_module_tools():
+    """
+    Return tools provided by this module for the unified registry.
+    
+    Returns:
+        Dictionary of tool metadata
+    """
+    from core.tools_registry import ToolMetadata, ParameterInfo, ParameterType, ToolCategory
+    
+    return {
+        "resolve_hostname": ToolMetadata(
+            name="resolve_hostname",
+            function_name="resolve_hostname",
+            module_path="network.dns_diagnostics",
+            description="Resolve hostname to IP addresses using specified DNS record type",
+            category=ToolCategory.DNS,
+            parameters={
+                "hostname": ParameterInfo(
+                    param_type=ParameterType.STRING,
+                    required=True,
+                    description="Target hostname to resolve"
+                ),
+                "record_type": ParameterInfo(
+                    param_type=ParameterType.STRING,
+                    required=False,
+                    default="A",
+                    description="DNS record type (A, AAAA, MX, NS, TXT, CNAME)",
+                    choices=["A", "AAAA", "MX", "NS", "TXT", "CNAME", "PTR", "SOA"]
+                ),
+                "silent": ParameterInfo(
+                    param_type=ParameterType.BOOLEAN,
+                    required=False,
+                    default=False,
+                    description="Suppress console output if True"
+                )
+            },
+            modes=["manual", "chatbot"],
+            aliases=["dns_resolve", "lookup"],
+            examples=[
+                "resolve_hostname google.com",
+                "resolve_hostname example.org MX",
+                "resolve_hostname cloudflare.com AAAA"
+            ]
+        ),
+        
+        "test_dns_servers": ToolMetadata(
+            name="test_dns_servers",
+            function_name="test_dns_servers",
+            module_path="network.dns_diagnostics",
+            description="Test connectivity and response time to DNS servers",
+            category=ToolCategory.DNS,
+            parameters={
+                "servers": ParameterInfo(
+                    param_type=ParameterType.LIST,
+                    required=False,
+                    default=None,
+                    description="List of DNS server IPs (uses defaults if None)"
+                ),
+                "test_domain": ParameterInfo(
+                    param_type=ParameterType.STRING,
+                    required=False,
+                    default="google.com",
+                    description="Domain to test resolution against"
+                ),
+                "silent": ParameterInfo(
+                    param_type=ParameterType.BOOLEAN,
+                    required=False,
+                    default=False,
+                    description="Suppress console output if True"
+                )
+            },
+            modes=["manual", "chatbot"],
+            aliases=["dns_test", "test_dns"],
+            examples=[
+                "test_dns_servers",
+                "test_dns_servers servers=['8.8.8.8','1.1.1.1'] test_domain='example.com'"
+            ]
+        ),
+        
+        "reverse_dns_lookup": ToolMetadata(
+            name="reverse_dns_lookup", 
+            function_name="reverse_dns_lookup",
+            module_path="network.dns_diagnostics",
+            description="Perform reverse DNS lookup to get hostname from IP address",
+            category=ToolCategory.DNS,
+            parameters={
+                "ip_address": ParameterInfo(
+                    param_type=ParameterType.STRING,
+                    required=True,
+                    description="IP address for reverse lookup"
+                ),
+                "silent": ParameterInfo(
+                    param_type=ParameterType.BOOLEAN,
+                    required=False,
+                    default=False,
+                    description="Suppress console output if True"
+                )
+            },
+            modes=["manual", "chatbot"],
+            aliases=["ptr_lookup", "reverse_lookup"],
+            examples=[
+                "reverse_dns_lookup 8.8.8.8",
+                "reverse_dns_lookup 1.1.1.1"
+            ]
+        ),
+        
+        "check_dns_propagation": ToolMetadata(
+            name="check_dns_propagation",
+            function_name="check_dns_propagation", 
+            module_path="network.dns_diagnostics",
+            description="Check DNS propagation across multiple DNS servers",
+            category=ToolCategory.DNS,
+            parameters={
+                "domain": ParameterInfo(
+                    param_type=ParameterType.STRING,
+                    required=True,
+                    description="Domain to check propagation for"
+                ),
+                "record_type": ParameterInfo(
+                    param_type=ParameterType.STRING,
+                    required=False,
+                    default="A",
+                    description="DNS record type to check",
+                    choices=["A", "AAAA", "MX", "NS", "TXT", "CNAME"]
+                ),
+                "servers": ParameterInfo(
+                    param_type=ParameterType.LIST,
+                    required=False,
+                    default=None,
+                    description="List of DNS servers to check (uses defaults if None)"
+                ),
+                "silent": ParameterInfo(
+                    param_type=ParameterType.BOOLEAN,
+                    required=False,
+                    default=False,
+                    description="Suppress console output if True"
+                )
+            },
+            modes=["manual", "chatbot"],
+            aliases=["dns_propagation", "propagation_check"],
+            examples=[
+                "check_dns_propagation example.com",
+                "check_dns_propagation newsite.org A"
+            ]
+        )
+    }

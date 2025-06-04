@@ -3,8 +3,8 @@
 Instability.py v3 - Network diagnostic and pentesting chatbot
 
 A terminal-based network diagnostic tool that provides an interactive interface
-for diagnosing and troubleshooting network connectivity issues, even during
-complete network outages.
+for diagnosing and troubleshooting network connectivity issues, pentesting,
+and comprehensive network assessment.
 
 Usage:
     python instability.py chatbot [--model MODEL] - Run the interactive chatbot
@@ -17,127 +17,129 @@ Options:
 """
 
 import sys
+import os
 import argparse
+from typing import Dict, Any
 from colorama import init, Fore, Style
 
 # Initialize colorama for cross-platform color support
 init(autoreset=True)
 
+# Add project root to path for imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Will be implemented in separate modules
+
 def start_chatbot_mode(model_name=None):
-    """Start the interactive chatbot"""
+    """Start the interactive chatbot with v3 startup sequence"""
     try:
+        # Run v3 startup sequence
+        from core.startup_checks import run_startup_sequence
+        startup_results = run_startup_sequence(silent=False)
+        
+        if not startup_results["success"]:
+            print(f"{Fore.YELLOW}[WARN] Startup checks completed with warnings. Proceeding in degraded mode.{Style.RESET_ALL}")
+        
+        # Start chatbot (v3 startup context integration to be added later)
         from chatbot import start_interactive_session
         start_interactive_session(model_name=model_name)
-    except ImportError:
-        print(
-            f"{Fore.RED}Error: Chatbot module not found. Make sure chatbot.py is in the same directory.{Style.RESET_ALL}")
+    except ImportError as e:
+        print(f"{Fore.RED}Error: Required module not found: {e}{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}Ensure all v3 modules are properly installed.{Style.RESET_ALL}")
     except Exception as e:
         print(f"{Fore.RED}Error starting chatbot: {e}{Style.RESET_ALL}")
 
 
 def run_manual_mode(tool_name=None):
-    """Run specific tools manually"""
+    """Run specific tools manually with v3 architecture"""
     try:
-        from network_diagnostics import get_available_tools, execute_tool
-
-        # Get all available tools
-        tools = get_available_tools()
+        # Quick startup check for tools
+        from core.startup_checks import check_tool_inventory
+        tool_inventory = check_tool_inventory(silent=True)
+        
+        # Get v3 tools registry
+        tools = _get_v3_tools_registry()
 
         if tool_name is None:
-            # List available tools
-            print(f"{Fore.CYAN}Available tools:{Style.RESET_ALL}")
-            for name, func in tools.items():
-                desc = func.__doc__.split('\n')[0].strip() if func.__doc__ else "No description"
-                print(f"  {Fore.GREEN}{name}{Style.RESET_ALL}: {desc}")
-            print(f"\nUse '{Fore.CYAN}python instability.py manual all{Style.RESET_ALL}' to run all tools")
-            print(f"Use '{Fore.CYAN}python instability.py manual <tool_name>{Style.RESET_ALL}' to run a specific tool")
+            # List available tools by category
+            print(f"{Fore.CYAN}Instability v3 - Available Tools:{Style.RESET_ALL}")
+            
+            categories = {
+                "Network Diagnostics": ["ping", "dns_check", "web_check", "network_scan"],
+                "Pentesting": ["nmap_scan", "port_scan", "host_discovery"],
+                "System Info": ["system_info", "interface_status", "tool_inventory"]
+            }
+            
+            for category, category_tools in categories.items():
+                print(f"\n{Fore.YELLOW}{category}:{Style.RESET_ALL}")
+                for tool in category_tools:
+                    if tool in tools:
+                        status = f"[{Fore.GREEN}OK{Style.RESET_ALL}]" if _is_tool_available(tool, tool_inventory) else f"[{Fore.YELLOW}WARN{Style.RESET_ALL}]"
+                        desc = tools[tool].get("description", "No description")
+                        print(f"  {status} {Fore.GREEN}{tool}{Style.RESET_ALL}: {desc}")
+            
+            print(f"\nUsage:")
+            print(f"  {Fore.CYAN}python instability.py manual all{Style.RESET_ALL} - Run comprehensive diagnostics")
+            print(f"  {Fore.CYAN}python instability.py manual <tool_name>{Style.RESET_ALL} - Run specific tool")
+            
         elif tool_name.lower() == 'all':
-            # Run all tools
-            print(f"{Fore.CYAN}Running all tools:{Style.RESET_ALL}")
-            for name, func in tools.items():
-                print(f"\n{Fore.GREEN}Running {name}...{Style.RESET_ALL}")
-                try:
-                    result = execute_tool(name)
-                    print(f"Result: {result}")
-                except Exception as e:
-                    print(f"{Fore.RED}Error executing {name}: {e}{Style.RESET_ALL}")
+            # Run comprehensive diagnostics
+            _run_comprehensive_diagnostics()
+            
         elif tool_name in tools:
             # Run specific tool
-            print(f"{Fore.GREEN}Running {tool_name}...{Style.RESET_ALL}")
-            try:
-                result = execute_tool(tool_name)
-                print(f"Result: {result}")
-            except Exception as e:
-                print(f"{Fore.RED}Error executing {tool_name}: {e}{Style.RESET_ALL}")
+            _execute_v3_tool(tool_name, tools[tool_name])
+            
         else:
             print(f"{Fore.RED}Tool '{tool_name}' not found.{Style.RESET_ALL}")
             print(f"Available tools: {', '.join(tools.keys())}")
-    except ImportError:
-        print(f"{Fore.RED}Error: Tools module not found. Make sure tools.py is in the same directory.{Style.RESET_ALL}")
+            
+    except ImportError as e:
+        print(f"{Fore.RED}Error: Required v3 module not found: {e}{Style.RESET_ALL}")
     except Exception as e:
         print(f"{Fore.RED}Error in manual mode: {e}{Style.RESET_ALL}")
 
 
 def run_test_mode():
-    """Test the environment setup"""
-    print(f"{Fore.CYAN}Running in test mode...{Style.RESET_ALL}")
-
-    # Test Python version
-    import platform
-    py_version = platform.python_version()
-    print(f"Python version: {py_version}")
-
-    # Test colorama
-    print(f"{Fore.GREEN}Colorama is working{Style.RESET_ALL}")
-
-    # Test Ollama
+    """Test the v3 environment setup using startup sequence"""
+    print(f"{Fore.CYAN}Instability v3 - Environment Test{Style.RESET_ALL}")
+    print(f"{'=' * 50}")
+    
     try:
-        import ollama
-        models = ollama.list()
-        print(f"{Fore.GREEN}Ollama is available{Style.RESET_ALL}")
-        print(f"Available models: {', '.join([m['name'] for m in models['models']])}")
-
-        # Check for phi3:14b model
-        has_phi3 = any(m['name'] == 'phi3:14b' for m in models['models'])
-        if has_phi3:
-            print(f"{Fore.GREEN}phi3:14b model is available{Style.RESET_ALL}")
+        # Run comprehensive v3 startup sequence
+        from core.startup_checks import run_startup_sequence
+        startup_results = run_startup_sequence(silent=False)
+        
+        print(f"\n{Fore.CYAN}Test Summary:{Style.RESET_ALL}")
+        print(f"{'=' * 50}")
+        
+        # Overall status
+        if startup_results["success"]:
+            print(f"{Fore.GREEN}[OK] All systems operational - Ready for full functionality{Style.RESET_ALL}")
         else:
-            print(
-                f"{Fore.YELLOW}phi3:14b model not found. You can install it with: ollama pull phi3:14b{Style.RESET_ALL}")
-    except ImportError:
-        print(f"{Fore.RED}Ollama Python package not installed.{Style.RESET_ALL}")
-        print(f"Install with: pip install ollama")
+            print(f"{Fore.YELLOW}[WARN] Some issues detected - Limited functionality available{Style.RESET_ALL}")
+        
+        # Phase summaries
+        for phase_name, phase_data in startup_results.get("phases", {}).items():
+            status_text = f"[{Fore.YELLOW}WARN{Style.RESET_ALL}]" if phase_data.get("success", False) else f"[{Fore.YELLOW}WARN{Style.RESET_ALL}]"
+            status_color = Fore.GREEN if phase_data.get("success", False) else Fore.YELLOW
+            print(f"{status_color}{status_text} {phase_name.replace('_', ' ').title()}: {phase_data.get('status', 'Unknown')}{Style.RESET_ALL}")
+        
+        # Tool inventory summary
+        tool_inventory = startup_results.get("phases", {}).get("tool_inventory", {})
+        if tool_inventory:
+            found_tools = len([t for t in tool_inventory.get("tools", {}).values() if t.get("found")])
+            total_tools = len(tool_inventory.get("tools", {}))
+            print(f"{Fore.CYAN}Tools Available: {found_tools}/{total_tools}{Style.RESET_ALL}")
+        
+        return 0 if startup_results["success"] else 1
+        
+    except ImportError as e:
+        print(f"{Fore.RED}Error: v3 startup module not found: {e}{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}Falling back to basic environment check...{Style.RESET_ALL}")
+        return _run_basic_test_mode()
     except Exception as e:
-        print(f"{Fore.RED}Error connecting to Ollama: {e}{Style.RESET_ALL}")
-        print(f"Ensure Ollama is running with: ollama serve")
-
-    # Test readline (for command history and completion)
-    try:
-        if sys.platform == 'darwin' or sys.platform.startswith('linux') or sys.platform.lower() == 'macos':
-            import readline
-            print(f"{Fore.GREEN}readline is available for command history{Style.RESET_ALL}")
-        elif sys.platform == 'win32':
-            try:
-                import pyreadline3
-                print(f"{Fore.GREEN}pyreadline3 is available for command history{Style.RESET_ALL}")
-            except ImportError:
-                print(
-                    f"{Fore.YELLOW}pyreadline3 not installed. Command history may not work on Windows.{Style.RESET_ALL}")
-                print(f"Install with: pip install pyreadline3")
-    except ImportError:
-        print(f"{Fore.YELLOW}readline not available. Command history will be limited.{Style.RESET_ALL}")
-
-    # Test network diagnostics module
-    try:
-        from network_diagnostics import get_available_tools
-        tools = get_available_tools()
-        print(f"{Fore.GREEN}Network diagnostics module is available with {len(tools)} tools{Style.RESET_ALL}")
-    except ImportError:
-        print(f"{Fore.RED}Network diagnostics module not found. Make sure network_diagnostics.py is in the same directory.{Style.RESET_ALL}")
-    except Exception as e:
-        print(f"{Fore.RED}Error loading network diagnostics: {e}{Style.RESET_ALL}")
+        print(f"{Fore.RED}Error running v3 test mode: {e}{Style.RESET_ALL}")
+        return 1
 
 
 def run_tests_mode():
@@ -158,26 +160,189 @@ def run_tests_mode():
 
 def show_help():
     """Display help information"""
-    print(f"{Fore.CYAN}Instability.py v2 - Network diagnostic chatbot{Style.RESET_ALL}")
-    print("\nA terminal-based network diagnostic tool that provides an interactive interface")
-    print("for diagnosing and troubleshooting network connectivity issues.")
-    print("\nUsage:")
+    print(f"{Fore.CYAN}Instability.py v3 - Network Diagnostic & Pentesting Toolkit{Style.RESET_ALL}")
+    print("\nA comprehensive terminal-based network diagnostic and pentesting tool")
+    print("with AI-powered assistance, persistent memory, and extensive tool integration.")
+    
+    print(f"\n{Fore.YELLOW}v3 Features:{Style.RESET_ALL}")
+    print("  • 4-Phase startup sequence with comprehensive environment assessment")
+    print("  • Proactive system verification and pentesting tool inventory")
+    print("  • Enhanced network diagnostics (Layer 2/3, DNS, Web connectivity)")
+    print("  • Native pentesting tool integration (nmap, nuclei, httpx, etc.)")
+    print("  • Persistent memory system with markdown-based storage")
+    print("  • Intelligent fallback modes when services unavailable")
+    
+    print(f"\n{Fore.YELLOW}Usage:{Style.RESET_ALL}")
     print(f"  {Fore.GREEN}python instability.py chatbot{Style.RESET_ALL}")
-    print("      Start the interactive chatbot")
+    print("      Start the interactive AI-powered chatbot with v3 startup sequence")
     print(f"  {Fore.GREEN}python instability.py manual [tool_name]{Style.RESET_ALL}")
-    print("      Run a specific tool or list available tools")
+    print("      Run diagnostic tools manually (use 'manual' to list all tools)")
+    print(f"  {Fore.GREEN}python instability.py manual all{Style.RESET_ALL}")
+    print("      Run comprehensive diagnostic suite")
     print(f"  {Fore.GREEN}python instability.py test{Style.RESET_ALL}")
-    print("      Test the environment setup")
+    print("      Run v3 environment test with 4-phase startup sequence")
     print(f"  {Fore.GREEN}python instability.py run-tests{Style.RESET_ALL}")
-    print("      Run all test scripts in the tests directory")
+    print("      Execute test suite")
     print(f"  {Fore.GREEN}python instability.py help{Style.RESET_ALL}")
     print("      Show this help information")
-    print("\nChatbot Commands:")
-    print(f"  {Fore.GREEN}/help{Style.RESET_ALL}  - Show available commands and tools")
-    print(f"  {Fore.GREEN}/exit{Style.RESET_ALL}  - Exit the chatbot")
-    print("\nNote: This tool is designed to function even during network outages")
-    print("      and can provide diagnostic information without internet access.")
+    
+    print(f"\n{Fore.YELLOW}Options:{Style.RESET_ALL}")
+    print(f"  {Fore.GREEN}--model, -m MODEL{Style.RESET_ALL}")
+    print("      Specify Ollama model (default: phi3:14b)")
+    
+    print(f"\n{Fore.YELLOW}Available Manual Tools:{Style.RESET_ALL}")
+    print(f"  {Fore.GREEN}Network Diagnostics:{Style.RESET_ALL} ping, dns_check, web_check, network_scan")
+    print(f"  {Fore.GREEN}Pentesting:{Style.RESET_ALL} nmap_scan, port_scan, host_discovery")
+    print(f"  {Fore.GREEN}System Info:{Style.RESET_ALL} system_info, interface_status, tool_inventory")
+    
+    print(f"\n{Fore.YELLOW}Chatbot Commands:{Style.RESET_ALL}")
+    print(f"  {Fore.GREEN}/help{Style.RESET_ALL}    - Show available commands and tools")
+    print(f"  {Fore.GREEN}/tools{Style.RESET_ALL}   - Display tool inventory")
+    print(f"  {Fore.GREEN}/memory{Style.RESET_ALL}  - Show persistent memory status")
+    print(f"  {Fore.GREEN}/scan{Style.RESET_ALL}    - Quick network scan")
+    print(f"  {Fore.GREEN}/exit{Style.RESET_ALL}    - Exit the chatbot")
+    
+    print(f"\n{Fore.YELLOW}v3 Startup Phases:{Style.RESET_ALL}")
+    print(f"  {Fore.GREEN}Phase 1:{Style.RESET_ALL} Core System Verification (OS, Ollama, interfaces, local IP)")
+    print(f"  {Fore.GREEN}Phase 2:{Style.RESET_ALL} Internet Connectivity Assessment (external IP, DNS, web)")
+    print(f"  {Fore.GREEN}Phase 3:{Style.RESET_ALL} Pentesting Tool Inventory (nmap, nuclei, httpx, etc.)")
+    print(f"  {Fore.GREEN}Phase 4:{Style.RESET_ALL} Target Scope Configuration (memory and scope management)")
+    
+    print(f"\n{Fore.YELLOW}Design Philosophy:{Style.RESET_ALL}")
+    print("  • Functions even during complete network outages")
+    print("  • Provides diagnostic information without internet access")
+    print("  • Modular architecture for easy extension")
+    print("  • Cross-platform compatibility")
 
+
+def _get_v3_tools_registry() -> Dict[str, Any]:
+    """Get registry of available v3 tools"""
+    return {
+        # Network Diagnostics
+        "ping": {"module": "network.layer3_diagnostics", "function": "ping_host", "description": "Test ICMP connectivity"},
+        "dns_check": {"module": "network.dns_diagnostics", "function": "resolve_hostname", "description": "DNS resolution testing"},
+        "web_check": {"module": "network.web_connectivity", "function": "test_http_connectivity", "description": "HTTP/HTTPS connectivity test"},
+        "network_scan": {"module": "network.layer2_diagnostics", "function": "get_all_interfaces", "description": "Network interface analysis"},
+        
+        # Pentesting Tools
+        "nmap_scan": {"module": "pentest.nmap_wrapper", "function": "run_nmap_scan", "description": "Network scanning with nmap"},
+        "port_scan": {"module": "pentest.nmap_wrapper", "function": "quick_port_scan", "description": "Quick port scan"},
+        "host_discovery": {"module": "pentest.nmap_wrapper", "function": "network_discovery", "description": "Network host discovery"},
+        
+        # System Information
+        "system_info": {"module": "network.layer2_diagnostics", "function": "get_system_info", "description": "System information"},
+        "interface_status": {"module": "network.layer2_diagnostics", "function": "get_all_interfaces", "description": "Network interface status"},
+        "tool_inventory": {"module": "pentest.tool_detector", "function": "scan_for_tools", "description": "Scan for available tools"}
+    }
+
+def _is_tool_available(tool_name: str, tool_inventory: Dict[str, Any]) -> bool:
+    """Check if a tool is available based on inventory"""
+    if not tool_inventory or "tools" not in tool_inventory:
+        return True  # Assume available if no inventory
+    
+    # Map tool names to actual tools in inventory
+    tool_mapping = {
+        "nmap_scan": "nmap",
+        "port_scan": "nmap", 
+        "host_discovery": "nmap"
+    }
+    
+    actual_tool = tool_mapping.get(tool_name, tool_name)
+    return tool_inventory["tools"].get(actual_tool, {}).get("found", True)
+
+def _execute_v3_tool(tool_name: str, tool_config: Dict[str, Any]):
+    """Execute a v3 tool"""
+    try:
+        module_name = tool_config["module"]
+        function_name = tool_config["function"]
+        
+        # Dynamic import
+        module = __import__(module_name, fromlist=[function_name])
+        func = getattr(module, function_name)
+        
+        print(f"{Fore.GREEN}Running {tool_name}...{Style.RESET_ALL}")
+        
+        # Execute with basic parameters
+        if tool_name in ["ping", "dns_check", "web_check"]:
+            # Tools that need a target
+            target = input(f"Enter target (hostname/IP): ").strip() or "google.com"
+            result = func(target, silent=False)
+        elif tool_name == "tool_inventory":
+            result = func(force_refresh=True)
+        elif tool_name in ["interface_status", "network_scan"]:
+            # Tools that don't accept silent parameter
+            result = func()
+        else:
+            result = func(silent=False)
+        
+        # Handle different result types
+        if isinstance(result, dict):
+            print(f"{Fore.CYAN}Result: {result.get('success', 'Unknown')}{Style.RESET_ALL}")
+        elif isinstance(result, list):
+            print(f"{Fore.CYAN}Found {len(result)} items{Style.RESET_ALL}")
+        else:
+            print(f"{Fore.CYAN}Result: {result}{Style.RESET_ALL}")
+        
+    except Exception as e:
+        print(f"{Fore.RED}Error executing {tool_name}: {e}{Style.RESET_ALL}")
+
+def _run_comprehensive_diagnostics():
+    """Run comprehensive diagnostic suite"""
+    print(f"{Fore.CYAN}Running Comprehensive Diagnostics Suite{Style.RESET_ALL}")
+    print(f"{'=' * 50}")
+    
+    try:
+        # Import required modules
+        from network.layer2_diagnostics import get_system_info, get_all_interfaces
+        from network.layer3_diagnostics import get_external_ip, ping_host
+        from network.web_connectivity import test_common_web_services
+        from pentest.tool_detector import scan_for_tools
+        
+        # System Information
+        print(f"\n{Fore.YELLOW}1. System Information{Style.RESET_ALL}")
+        system_info = get_system_info(silent=False)
+        
+        # Network Interfaces
+        print(f"\n{Fore.YELLOW}2. Network Interfaces{Style.RESET_ALL}")
+        interfaces = get_all_interfaces()
+        
+        # External Connectivity
+        print(f"\n{Fore.YELLOW}3. External Connectivity{Style.RESET_ALL}")
+        external_ip = get_external_ip(silent=False)
+        ping_result = ping_host("8.8.8.8", count=3, silent=False)
+        
+        # Web Services
+        print(f"\n{Fore.YELLOW}4. Web Service Connectivity{Style.RESET_ALL}")
+        web_services = test_common_web_services(silent=False)
+        
+        # Tool Inventory
+        print(f"\n{Fore.YELLOW}5. Tool Inventory{Style.RESET_ALL}")
+        tool_inventory = scan_for_tools(force_refresh=False)
+        
+        print(f"\n{Fore.GREEN}Comprehensive diagnostics completed.{Style.RESET_ALL}")
+        
+    except Exception as e:
+        print(f"{Fore.RED}Error in comprehensive diagnostics: {e}{Style.RESET_ALL}")
+
+def _run_basic_test_mode():
+    """Fallback basic test mode"""
+    print(f"{Fore.YELLOW}Running basic environment test...{Style.RESET_ALL}")
+    
+    import platform
+    py_version = platform.python_version()
+    print(f"Python version: {py_version}")
+    print(f"{Fore.GREEN}Colorama is working{Style.RESET_ALL}")
+    
+    # Test Ollama
+    try:
+        import ollama
+        models = ollama.list()
+        print(f"{Fore.GREEN}Ollama is available{Style.RESET_ALL}")
+        print(f"Available models: {', '.join([m['name'] for m in models['models']])}")
+    except Exception as e:
+        print(f"{Fore.RED}Ollama not available: {e}{Style.RESET_ALL}")
+    
+    return 0
 
 def main():
     """Main entry point for instability.py"""

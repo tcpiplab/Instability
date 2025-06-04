@@ -13,6 +13,9 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 
+# Import colorama for terminal colors
+from colorama import Fore, Style
+
 # Import configuration
 from config import (
     MEMORY_DIR, NETWORK_STATE_FILE, TARGET_SCOPE_FILE, SESSION_CACHE_FILE,
@@ -140,32 +143,32 @@ def create_default_target_scope() -> None:
 ## Testing Guidelines
 
 ### Allowed Activities
-- ✓ Port scanning and service enumeration
-- ✓ Vulnerability scanning with Nuclei
-- ✓ Web application discovery
-- ✓ Default credential testing
-- ✓ Network topology mapping
+- [ALLOWED] Port scanning and service enumeration
+- [ALLOWED] Vulnerability scanning with Nuclei
+- [ALLOWED] Web application discovery
+- [ALLOWED] Default credential testing
+- [ALLOWED] Network topology mapping
 
 ### Prohibited Activities
-- ✗ Exploitation of discovered vulnerabilities
-- ✗ Data exfiltration or modification
-- ✗ Denial of service attacks
-- ✗ Social engineering
-- ✗ Physical security testing
+- [PROHIBITED] Exploitation of discovered vulnerabilities
+- [PROHIBITED] Data exfiltration or modification
+- [PROHIBITED] Denial of service attacks
+- [PROHIBITED] Social engineering
+- [PROHIBITED] Physical security testing
 
 ## Tool Usage Authorization
 
 ### Passive Reconnaissance
-- ✓ nmap (TCP SYN scans only)
-- ✓ httpx for web discovery
-- ✓ DNS enumeration
-- ✓ OSINT gathering
+- [ALLOWED] nmap (TCP SYN scans only)
+- [ALLOWED] httpx for web discovery
+- [ALLOWED] DNS enumeration
+- [ALLOWED] OSINT gathering
 
 ### Active Testing
-- ✓ Nuclei vulnerability scans
-- ✓ Directory/file enumeration (feroxbuster, gobuster)
-- ⚠️ Light credential testing (hydra with small wordlists)
-- ✗ Exploitation frameworks (Metasploit, etc.)
+- [ALLOWED] Nuclei vulnerability scans
+- [ALLOWED] Directory/file enumeration (feroxbuster, gobuster)
+- ⚠ Light credential testing (hydra with small wordlists)
+- [PROHIBITED] Exploitation frameworks (Metasploit, etc.)
 
 ## Findings Summary
 
@@ -230,7 +233,7 @@ def read_network_state() -> Dict[str, Any]:
         return parsed_data
     
     except Exception as e:
-        print(f"Warning: Failed to read network state file: {e}")
+        print(f"Warning: Failed to read network state file: {Fore.RED}{e}{Style.RESET_ALL}")
         return {}
 
 
@@ -270,7 +273,7 @@ def update_network_state(updates: Dict[str, Any]) -> None:
         os.rename(temp_file, NETWORK_STATE_FILE)
     
     except Exception as e:
-        print(f"Warning: Failed to update network state file: {e}")
+        print(f"Warning: Failed to update network state file: {Fore.RED}{e}{Style.RESET_ALL}")
 
 
 def read_target_scope() -> Dict[str, Any]:
@@ -292,7 +295,7 @@ def read_target_scope() -> Dict[str, Any]:
         return parsed_data
     
     except Exception as e:
-        print(f"Warning: Failed to read target scope file: {e}")
+        print(f"Warning: Failed to read target scope file: {Fore.RED}{e}{Style.RESET_ALL}")
         return {"scope_type": DEFAULT_TARGET_SCOPE, "targets": []}
 
 
@@ -346,7 +349,7 @@ def update_target_scope(scope_data: Dict[str, Any]) -> None:
         os.rename(temp_file, TARGET_SCOPE_FILE)
     
     except Exception as e:
-        print(f"Warning: Failed to update target scope file: {e}")
+        print(f"Warning: Failed to update target scope file: {Fore.RED}{e}{Style.RESET_ALL}")
 
 
 def load_session_cache() -> Dict[str, Any]:
@@ -363,7 +366,7 @@ def load_session_cache() -> Dict[str, Any]:
         with open(SESSION_CACHE_FILE, 'r') as f:
             return json.load(f)
     except Exception as e:
-        print(f"Warning: Failed to load session cache: {e}")
+        print(f"Warning: Failed to load session cache: {Fore.RED}{e}{Style.RESET_ALL}")
         create_empty_session_cache()
         return load_session_cache()
 
@@ -387,7 +390,7 @@ def save_session_cache(cache: Dict[str, Any]) -> None:
         os.rename(temp_file, SESSION_CACHE_FILE)
     
     except Exception as e:
-        print(f"Warning: Failed to save session cache: {e}")
+        print(f"Warning: Failed to save session cache: {Fore.RED}{e}{Style.RESET_ALL}")
 
 
 def cache_tool_result(tool_name: str, result: Dict[str, Any], ttl_minutes: int = 60) -> None:
@@ -418,7 +421,7 @@ def cache_tool_result(tool_name: str, result: Dict[str, Any], ttl_minutes: int =
         save_session_cache(cache)
     
     except Exception as e:
-        print(f"Warning: Failed to cache tool result: {e}")
+        print(f"Warning: Failed to cache tool result: {Fore.RED}{e}{Style.RESET_ALL}")
 
 
 def get_cached_result(tool_name: str) -> Optional[Dict[str, Any]]:
@@ -448,7 +451,7 @@ def get_cached_result(tool_name: str) -> Optional[Dict[str, Any]]:
         return None
     
     except Exception as e:
-        print(f"Warning: Failed to get cached result: {e}")
+        print(f"Warning: Failed to get cached result: {Fore.RED}{e}{Style.RESET_ALL}")
         return None
 
 
@@ -554,19 +557,19 @@ def test_memory_manager():
     
     # Test initialization
     initialize_memory_files()
-    print("✓ Memory files initialized")
+    print(f"[{Fore.GREEN}OK{Style.RESET_ALL}] Memory files initialized")
     
     # Test reading network state
     network_state = read_network_state()
-    print(f"✓ Network state loaded: {len(network_state)} sections")
+    print(f"[{Fore.GREEN}OK{Style.RESET_ALL}] Network state loaded: {len(network_state)} sections")
     
     # Test reading target scope
     target_scope = read_target_scope()
-    print(f"✓ Target scope loaded: {target_scope.get('scope_type', 'unknown')}")
+    print(f"[{Fore.GREEN}OK{Style.RESET_ALL}] Target scope loaded: {target_scope.get('scope_type', 'unknown')}")
     
     # Test session cache
     cache = load_session_cache()
-    print(f"✓ Session cache loaded")
+    print(f"[{Fore.GREEN}OK{Style.RESET_ALL}] Session cache loaded")
     
     return True
 

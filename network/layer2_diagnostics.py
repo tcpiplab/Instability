@@ -14,6 +14,9 @@ import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
+# Import colorama for terminal colors
+from colorama import Fore, Style
+
 # Import configuration
 from config import PING_TIMEOUT
 
@@ -67,7 +70,7 @@ def get_local_ip(interface: str = None, silent: bool = False) -> Dict[str, Any]:
     
     except Exception as e:
         execution_time = (datetime.now() - start_time).total_seconds()
-        error_msg = f"Failed to get local IP: {e}"
+        error_msg = f"Failed to get local IP: {Fore.RED}{e}{Style.RESET_ALL}"
         
         if not silent:
             print(f"Error: {error_msg}")
@@ -117,7 +120,7 @@ def check_interface_status(interface: str = None, silent: bool = False) -> Dict[
         if not silent:
             print(f"Network interfaces ({len(interfaces)} found):")
             for iface in interfaces:
-                status_icon = "🟢" if iface["status"] == "up" else "🔴"
+                status_icon = "[UP]" if iface["status"] == "up" else "[DOWN]"
                 print(f"  {status_icon} {iface['name']}: {iface['ip']} ({iface['status']})")
         
         return {
@@ -141,7 +144,7 @@ def check_interface_status(interface: str = None, silent: bool = False) -> Dict[
     
     except Exception as e:
         execution_time = (datetime.now() - start_time).total_seconds()
-        error_msg = f"Failed to check interface status: {e}"
+        error_msg = f"Failed to check interface status: {Fore.RED}{e}{Style.RESET_ALL}"
         
         if not silent:
             print(f"Error: {error_msg}")
@@ -214,7 +217,7 @@ def get_system_info(silent: bool = False) -> Dict[str, Any]:
     
     except Exception as e:
         execution_time = (datetime.now() - start_time).total_seconds()
-        error_msg = f"Failed to get system info: {e}"
+        error_msg = f"Failed to get system info: {Fore.RED}{e}{Style.RESET_ALL}"
         
         if not silent:
             print(f"Error: {error_msg}")
@@ -287,7 +290,7 @@ def get_gateway_info(silent: bool = False) -> Dict[str, Any]:
     
     except Exception as e:
         execution_time = (datetime.now() - start_time).total_seconds()
-        error_msg = f"Failed to get gateway info: {e}"
+        error_msg = f"Failed to get gateway info: {Fore.RED}{e}{Style.RESET_ALL}"
         
         if not silent:
             print(f"Error: {error_msg}")
@@ -589,7 +592,7 @@ def test_layer2_diagnostics():
             if result['parsed_data']:
                 print(f"Data: {list(result['parsed_data'].keys())}")
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Error: {Fore.RED}{e}{Style.RESET_ALL}")
 
 
 if __name__ == "__main__":

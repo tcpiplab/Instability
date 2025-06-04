@@ -54,9 +54,10 @@ except ImportError:
 
 # Local imports
 try:
-    from network_diagnostics import get_available_tools, execute_tool
+    from core.tools_registry import get_tool_registry
+    from network_diagnostics import get_available_tools  # Legacy fallback for tool listing
 except ImportError:
-    print(f"{Fore.RED}Error: Network diagnostics module not found. Make sure network_diagnostics.py is in the same directory.{Style.RESET_ALL}")
+    print(f"{Fore.RED}Error: Tool registry or network diagnostics module not found.{Style.RESET_ALL}")
     sys.exit(1)
 
 # Configuration
@@ -231,28 +232,35 @@ def parse_tool_call(content: str) -> Tuple[Optional[str], Optional[Dict[str, Any
         else:
             # No args specified
             tool_name = tool_part.split("\n")[0].strip()
+        
+        # Clean up tool name - remove parentheses if present (AI sometimes adds them)
+        if "(" in tool_name:
+            tool_name = tool_name.split("(")[0]
 
         # Extract args if present
         args = {}
         if "ARGS:" in tool_part:
             args_text = tool_part.split("ARGS:")[1].strip()
+            
+            # Take only the first line after ARGS: to avoid parsing fake tool results
+            args_line = args_text.split('\n')[0].strip()
 
             # Find the JSON part (everything between { and })
-            json_start = args_text.find("{")
+            json_start = args_line.find("{")
             if json_start >= 0:
-                json_end = args_text.rfind("}") + 1
+                json_end = args_line.rfind("}") + 1
                 if json_end > json_start:
-                    json_str = args_text[json_start:json_end]
+                    json_str = args_line[json_start:json_end]
                     try:
                         args = json.loads(json_str)
-                    except json.JSONDecodeError:
+                    except json.JSONDecodeError as e:
                         # Invalid JSON, use empty args
-                        print_error(f"Invalid JSON in args: {json_str}")
+                        print_error(f"Invalid JSON in args: {json_str} (Error: {e})")
                         args = {}
 
         return tool_name, args
     except Exception as e:
-        print_error(f"Error parsing tool call: {e}")
+        print_error(f"Error parsing tool call: {Fore.RED}{e}{Style.RESET_ALL}")
         return None, None
 
 
@@ -306,14 +314,16 @@ def handle_command(command: str, cache: Dict[str, Any]) -> Tuple[bool, bool]:
         if tool_name in tools:
             print_tool_execution(tool_name)
             try:
-                result = execute_tool(tool_name)
-                print(f"{ASSISTANT_COLOR}Chatbot (tool completed): {TOOL_COLOR}Result:{Style.RESET_ALL} {result}")
+                # Use v3 tool registry for proper execution
+                registry = get_tool_registry()
+                result = registry.execute_tool(tool_name, {}, mode="manual")
+                # Tool result suppressed for clean output
 
                 # Update cache with the result
                 cache[tool_name] = result
                 save_cache(cache)
             except Exception as e:
-                print_error(f"Error executing tool {tool_name}: {e}")
+                print_error(f"Error executing tool {tool_name}: {Fore.RED}{e}{Style.RESET_ALL}")
             return True, False
         else:
             print_error(f"Unknown command or tool: {cmd}")
@@ -338,15 +348,27 @@ def start_interactive_session(model_name: str = DEFAULT_MODEL) -> None:
     conversation = [
         {
             "role": "system",
-            "content": """You are a network diagnostics specialist that helps troubleshoot connectivity issues.
-You have access to various networking tools that can be called to diagnose problems.
+            "content": """You are a network diagnostics and cybersecurity specialist working with an experienced security admin/pentester. 
+            You can also call tools for network diagnosis, security scanning, and for pentest reconnaissance.
+            You have access to various networking tools that can be called to diagnose problems or to do pentest reconnaissance and security scanning.
+            You are capable of reasoning about network and security issues, but you must use the tools to get real data.
 
-IMPORTANT: For any network-related questions about connectivity, DNS, ping, latency, IP addresses, routing, or network performance, you MUST use the appropriate tools to get real data. Do not guess or provide generic answers without using tools. Do not simulate or hallucinate data or tool results.
+IMPORTANT: For any network-related questions about connectivity, DNS, ping, latency, IP addresses, routing, or network performance, you MUST use the appropriate tools to get real data. Do not guess or provide generic answers without using tools. 
+
+CRITICAL: NEVER include fake tool results, sample data, or "Tool result:" text in your responses. Only call tools using the specified format and wait for the actual results.
+
+CRITICAL: NEVER attempt to infer NAT status from speed test results, responsiveness metrics, or other unrelated network data. NAT detection requires checking IP addresses directly via check_nat_status.
 
 When you need specific information, you can call a tool using this format:
 
 TOOL: tool_name
 ARGS: {"arg_name": "value"} (or {} if no arguments needed)
+
+STOP after the tool call. Do NOT include any text like "Tool result:", example output, or sample data. The system will execute the tool and provide the real result.
+
+CONTEXT AWARENESS: When users ask about "we", "our machine", "this system", or "localhost", they mean the LOCAL machine you're running on. When they specify IP addresses or hostnames, they mean REMOTE targets.
+
+IMPORTANT: Do NOT use pentesting tools (nmap_scan, os_detection_scan, etc.) for questions about the local machine. Use local system tools instead.
 
 Examples of when you MUST use tools:
 - Questions about ping times or connectivity → use ping_target
@@ -355,12 +377,21 @@ Examples of when you MUST use tools:
 - IP address questions → use get_external_ip or get_local_ip
 - Website accessibility → use check_websites
 - General connectivity → use check_internet_connection or check_local_network
-- NAT questions → use check_nat_status
+- NAT questions (Are we behind NAT? Are we using NAT? NAT status?) → ALWAYS use check_nat_status
 - Speed or bandwidth questions → use run_speed_test
-- Questions about the local operating system → use get_os_info
+- Questions about the local operating system (this machine, localhost) → use get_os_info
+- Port scanning or service detection on remote hosts → use nmap_scan, quick_port_scan, service_version_scan
+- Network discovery or host discovery on remote networks → use network_discovery
+- OS fingerprinting of remote hosts/targets → use os_detection_scan
+- Comprehensive security scanning → use comprehensive_scan
 
-Always provide clear explanations of what the tools do and what the results mean.
-If you're unsure about a problem, suggest multiple possible diagnoses and how to confirm them using tools.
+Be direct, concise, and opinionated. Use technical shorthand. You are an expert conversing with another expert. 
+Skip basic explanations of common technologies. 
+Assume the user understands networking concepts, protocols, and security tools.
+
+CRITICAL: Keep all responses extremely brief. One to two sentences maximum. 
+When using tools, provide only essential context before the tool call - no lengthy explanations.
+After tool execution, interpret results concisely without repeating obvious information.
 """
         }
     ]
@@ -370,7 +401,27 @@ If you're unsure about a problem, suggest multiple possible diagnoses and how to
     tool_descriptions = []
     for name, func in tools.items():
         desc = func.__doc__.split('\n')[0].strip() if func.__doc__ else f"Tool: {name}"
-        tool_descriptions.append(f"- {name}: {desc}")
+        
+        # Get function signature to show parameters
+        import inspect
+        try:
+            sig = inspect.signature(func)
+            params = []
+            for param_name, param in sig.parameters.items():
+                if param.default == inspect.Parameter.empty:
+                    params.append(f"{param_name}")
+                else:
+                    params.append(f"{param_name}={param.default}")
+            
+            if params:
+                signature = f"({', '.join(params)})"
+            else:
+                signature = "()"
+            
+            tool_descriptions.append(f"- {name}{signature}: {desc}")
+        except Exception:
+            # Fallback if signature inspection fails
+            tool_descriptions.append(f"- {name}: {desc}")
 
     # Add tool descriptions to system message
     tool_system_message = {
@@ -419,19 +470,20 @@ If you're unsure about a problem, suggest multiple possible diagnoses and how to
 
                 if tool_name:
 
-                    # Display the assistant's first message, which always seems to be planning, or
-                    # explaining, but also hallucinating sometimes
-                    # print_assistant(content)
-                    print_planning(content)
+                    # Extract planning section concisely
+                    planning_content = _extract_planning_section(content)
+                    if planning_content:
+                        print_planning(planning_content)
 
                     # Check if the tool exists
                     if tool_name in tools:
                         print_tool_execution(tool_name)
 
                         try:
-                            # Execute the tool
-                            tool_result = execute_tool(tool_name, args)
-                            print(f"{ASSISTANT_COLOR}Chatbot (tool completed): {TOOL_COLOR}Result: \n{Style.RESET_ALL}{tool_result}")
+                            # Execute the tool using v3 registry (filters invalid parameters)
+                            registry = get_tool_registry()
+                            tool_result = registry.execute_tool(tool_name, args, mode="chatbot")
+                            # Tool result suppressed for clean output
 
                             # Update cache with result
                             cache[tool_name] = tool_result
@@ -445,7 +497,7 @@ If you're unsure about a problem, suggest multiple possible diagnoses and how to
                             follow_up = ollama.chat(
                                 model=model_name,
                                 messages=conversation,
-                                options={"temperature": 0.1}
+                                options={"temperature": 0.7}
                             )
 
                             # Add and display follow-up
@@ -459,7 +511,7 @@ If you're unsure about a problem, suggest multiple possible diagnoses and how to
 
                         except Exception as e:
 
-                            error_msg = f"Error executing tool {tool_name}: {e}"
+                            error_msg = f"Error executing tool {tool_name}: {Fore.RED}{e}{Style.RESET_ALL}"
                             print_error(error_msg)
                             conversation.append({"role": "system", "content": error_msg})
 
@@ -472,7 +524,7 @@ If you're unsure about a problem, suggest multiple possible diagnoses and how to
                 else:
 
                     # No tool call - check if this is a network-related question and add warning
-                    network_keywords = ['ping', 'network', 'connectivity', 'internet', 'dns', 'ip', 'connection', 'latency', 'speed', 'bandwidth', 'traceroute', 'route', 'packet', 'loss']
+                    network_keywords = ['ping', 'network', 'connectivity', 'internet', 'dns', 'ip', 'connection', 'latency', 'speed', 'bandwidth', 'traceroute', 'route', 'packet', 'loss', 'nat', 'firewall', 'port', 'external', 'local']
                     user_message = conversation[-1].get('content', '').lower() if conversation else ''
                     
                     is_network_question = any(keyword in user_message for keyword in network_keywords)
@@ -480,7 +532,7 @@ If you're unsure about a problem, suggest multiple possible diagnoses and how to
                     if is_network_question:
                         warning_msg = "WARNING: Network diagnostic questions should use tools for accurate data. Response may contain inaccurate information."
                         conversation.append({"role": "system", "content": warning_msg})
-                        print(f"{Fore.YELLOW}⚠️  {warning_msg}{Style.RESET_ALL}")
+                        print(f"{Fore.YELLOW}[WARN] {warning_msg}{Style.RESET_ALL}")
 
                     # No tool call, just display the response
                     conversation.append({"role": "assistant", "content": content})
@@ -496,7 +548,7 @@ If you're unsure about a problem, suggest multiple possible diagnoses and how to
                     conversation = conversation[:2] + conversation[-(MAX_CONVERSATION_LENGTH):]
 
             except Exception as e:
-                print_error(f"Error generating response: {e}")
+                print_error(f"Error generating response: {Fore.RED}{e}{Style.RESET_ALL}")
 
     except KeyboardInterrupt:
 
@@ -504,9 +556,31 @@ If you're unsure about a problem, suggest multiple possible diagnoses and how to
 
     except Exception as e:
 
-        print_error(f"Unexpected error: {e}")
+        print_error(f"Unexpected error: {Fore.RED}{e}{Style.RESET_ALL}")
 
     finally:
-
         # Save cache before exiting
         save_cache(cache)
+
+
+def _extract_planning_section(content: str) -> Optional[str]:
+    """Extract planning/reasoning section before tool call, keeping it concise"""
+    # Find the TOOL: line
+    tool_index = content.find("TOOL:")
+    if tool_index == -1:
+        return None
+    
+    # Get text before the tool call
+    planning_text = content[:tool_index].strip()
+    
+    # If planning text is too long, take first sentence or first 100 chars
+    if len(planning_text) > 100:
+        # Try to find first sentence
+        sentences = planning_text.split('. ')
+        if len(sentences) > 0 and len(sentences[0]) < 100:
+            return sentences[0] + '.'
+        else:
+            # Truncate to 100 chars
+            return planning_text[:97] + "..."
+    
+    return planning_text if planning_text else None
