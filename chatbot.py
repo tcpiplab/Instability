@@ -317,10 +317,7 @@ def handle_command(command: str, cache: Dict[str, Any]) -> Tuple[bool, bool]:
                 # Use v3 tool registry for proper execution
                 registry = get_tool_registry()
                 result = registry.execute_tool(tool_name, {}, mode="manual")
-                
-                # Extract concise result for display
-                display_result = _format_tool_result_concisely(result)
-                print(f"{ASSISTANT_COLOR}Chatbot (tool completed): {TOOL_COLOR}Result:{Style.RESET_ALL} {display_result}")
+                # Tool result suppressed for clean output
 
                 # Update cache with the result
                 cache[tool_name] = result
@@ -360,6 +357,8 @@ IMPORTANT: For any network-related questions about connectivity, DNS, ping, late
 
 CRITICAL: NEVER include fake tool results, sample data, or "Tool result:" text in your responses. Only call tools using the specified format and wait for the actual results.
 
+CRITICAL: NEVER attempt to infer NAT status from speed test results, responsiveness metrics, or other unrelated network data. NAT detection requires checking IP addresses directly via check_nat_status.
+
 When you need specific information, you can call a tool using this format:
 
 TOOL: tool_name
@@ -378,7 +377,7 @@ Examples of when you MUST use tools:
 - IP address questions → use get_external_ip or get_local_ip
 - Website accessibility → use check_websites
 - General connectivity → use check_internet_connection or check_local_network
-- NAT questions → use check_nat_status
+- NAT questions (Are we behind NAT? Are we using NAT? NAT status?) → ALWAYS use check_nat_status
 - Speed or bandwidth questions → use run_speed_test
 - Questions about the local operating system (this machine, localhost) → use get_os_info
 - Port scanning or service detection on remote hosts → use nmap_scan, quick_port_scan, service_version_scan
@@ -484,10 +483,7 @@ After tool execution, interpret results concisely without repeating obvious info
                             # Execute the tool using v3 registry (filters invalid parameters)
                             registry = get_tool_registry()
                             tool_result = registry.execute_tool(tool_name, args, mode="chatbot")
-                            
-                            # Extract concise result for display
-                            display_result = _format_tool_result_concisely(tool_result)
-                            print(f"{ASSISTANT_COLOR}Chatbot (tool completed): {TOOL_COLOR}Result:{Style.RESET_ALL} {display_result}")
+                            # Tool result suppressed for clean output
 
                             # Update cache with result
                             cache[tool_name] = tool_result
@@ -528,7 +524,7 @@ After tool execution, interpret results concisely without repeating obvious info
                 else:
 
                     # No tool call - check if this is a network-related question and add warning
-                    network_keywords = ['ping', 'network', 'connectivity', 'internet', 'dns', 'ip', 'connection', 'latency', 'speed', 'bandwidth', 'traceroute', 'route', 'packet', 'loss']
+                    network_keywords = ['ping', 'network', 'connectivity', 'internet', 'dns', 'ip', 'connection', 'latency', 'speed', 'bandwidth', 'traceroute', 'route', 'packet', 'loss', 'nat', 'firewall', 'port', 'external', 'local']
                     user_message = conversation[-1].get('content', '').lower() if conversation else ''
                     
                     is_network_question = any(keyword in user_message for keyword in network_keywords)
@@ -588,44 +584,3 @@ def _extract_planning_section(content: str) -> Optional[str]:
             return planning_text[:97] + "..."
     
     return planning_text if planning_text else None
-
-
-def _format_tool_result_concisely(tool_result: Any) -> str:
-    """Format tool result concisely for chatbot display"""
-    if isinstance(tool_result, dict):
-        # Handle standardized v3 tool result format
-        if 'success' in tool_result:
-            if tool_result.get('success'):
-                # Show just the main output/result
-                if 'stdout' in tool_result and tool_result['stdout']:
-                    return tool_result['stdout']
-                elif 'parsed_data' in tool_result and tool_result['parsed_data']:
-                    data = tool_result['parsed_data']
-                    if isinstance(data, dict) and 'result' in data:
-                        return str(data['result'])
-                    return str(data)
-                else:
-                    return "Success"
-            else:
-                # Show error message concisely
-                error_msg = tool_result.get('error_message', 'Tool execution failed')
-                return f"Error: {error_msg}"
-        
-        # Handle error responses
-        elif 'error' in tool_result:
-            return f"Error: {tool_result['error']}"
-        
-        # For other dict types, try to find the most relevant content
-        elif 'stdout' in tool_result:
-            return tool_result['stdout']
-        elif 'result' in tool_result:
-            return str(tool_result['result'])
-        else:
-            # Fallback: show first few non-internal keys
-            relevant_data = {k: v for k, v in tool_result.items() 
-                           if not k.startswith('_') and k not in ['success', 'execution_time', 'timestamp', 'tool_name', 'command_executed', 'exit_code', 'options_used', 'stderr', 'error_type']}
-            if relevant_data:
-                return str(relevant_data)
-    
-    # For non-dict results, return as-is
-    return str(tool_result)

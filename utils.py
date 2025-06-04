@@ -93,10 +93,6 @@ def print_tool_execution(tool_name: str):
     print(f"{ASSISTANT_COLOR}Chatbot (executing tool): {TOOL_COLOR}{tool_name}{Style.RESET_ALL}")
 
 
-def print_tool_result(result: str):
-    """Print a tool execution result"""
-    print(f"{ASSISTANT_COLOR}Chatbot (tool completed): {TOOL_COLOR}Result: {Style.RESET_ALL}{result}")
-
 
 def print_error(message: str):
     """Print an error message"""
@@ -231,11 +227,11 @@ def format_tool_result(tool_name: str, result: str) -> str:
     # Truncate very long results
     truncated_result = truncate_long_output(result)
 
-    # Format with consistent style and markdown code blocks for monospace output
+    # Format with consistent style and Markdown code blocks for monospace output
     formatted = f"Tool: {tool_name}\n"
     formatted += "=" * (len(tool_name) + 6) + "\n"
     
-    # If the result looks like structured data or code, wrap it in a markdown code block
+    # If the result looks like structured data or code, wrap it in a Markdown code block
     if any(pattern in truncated_result for pattern in ['{', '}', '[', ']', ':', '|', '=', '/']):
         formatted += f"```\n{truncated_result}\n```"
     else:
