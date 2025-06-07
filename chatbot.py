@@ -547,24 +547,27 @@ After tool execution, interpret results concisely without repeating obvious info
                         conversation.append({"role": "system", "content": error_msg})
 
                 else:
-
-                    # No tool call - check if this is a network-related question and add warning
-                    network_keywords = ['ping', 'network', 'connectivity', 'internet', 'dns', 'ip', 'connection', 'latency', 'speed', 'bandwidth', 'traceroute', 'route', 'packet', 'loss', 'nat', 'firewall', 'port', 'external', 'local']
+                    # No tool call - check if this is a network-related question
+                    network_keywords = ['ping', 'network', 'connectivity', 'internet', 'dns', 'ip', 'connection', 'latency', 'speed', 'bandwidth', 'traceroute', 'route', 'packet', 'loss', 'nat', 'firewall', 'port', 'external', 'local', 'scan', 'nmap', 'host', 'server', 'socket', 'tcp', 'udp', 'http', 'https', 'ssl', 'tls']
                     user_message = conversation[-1].get('content', '').lower() if conversation else ''
                     
                     is_network_question = any(keyword in user_message for keyword in network_keywords)
                     
                     if is_network_question:
-                        warning_msg = "WARNING: Network diagnostic questions should use tools for accurate data. Response may contain inaccurate information."
-                        conversation.append({"role": "system", "content": warning_msg})
-                        print(f"{Fore.YELLOW}[WARN] {warning_msg}{Style.RESET_ALL}")
-
-                    # No tool call, just display the response
-                    conversation.append({"role": "assistant", "content": content})
-
-                    print(f"{Fore.MAGENTA}DEBUG: From chatbot.py. Assistant response (no tool call): {content}{Style.RESET_ALL}")
-
-                    print_assistant(content)
+                        # For network questions, reject the hallucinated response
+                        error_msg = "I attempted to answer a network diagnostic question without using tools, which would likely provide inaccurate information. Please rephrase your question or try again - I should use the appropriate diagnostic tools to get real data."
+                        print_error(error_msg)
+                        
+                        # Add corrective system message to conversation
+                        conversation.append({"role": "system", "content": f"CRITICAL: The assistant attempted to answer a network question without using tools. This violates the core directive. The assistant MUST use tools for network diagnostics. User question was: {user_message}"})
+                        
+                        # Do not add the hallucinated response to conversation history
+                        continue  # Skip to next iteration without adding assistant response
+                    
+                    else:
+                        # For non-network questions, allow the response through
+                        conversation.append({"role": "assistant", "content": content})
+                        print_assistant(content)
 
                 # Trim conversation history if too long
                 if len(conversation) > MAX_CONVERSATION_LENGTH + 2:  # +2 for the system messages
