@@ -408,8 +408,27 @@ DO NOT include any "TOOL:" calls or "ARGS:" sections in your response.
         # Get the response content
         content = response["message"]["content"]
         
-        # Display the thinking output
-        print(f"{ASSISTANT_COLOR}Chatbot (thinking):{Style.RESET_ALL}{content}")
+        # Save the thinking context for the next user interaction
+        # Store both the context and the thinking content in cache
+        cache = load_cache()
+        cache['_pending_think_context'] = {
+            'context': response.get('context'),
+            'think_input': think_input,
+            'think_output': content
+        }
+        save_cache(cache)
+        
+        # Display the thinking output with number colorization
+        colored_content = colorize_numbers(content)
+        
+        if RICH_AVAILABLE:
+            from rich.text import Text
+            print(f"{ASSISTANT_COLOR}Chatbot (thinking):{Style.RESET_ALL}", end="")
+            text = Text.from_markup(colored_content)
+            console.print(text)
+        else:
+            # Fallback to regular print without Rich markup
+            print(f"{ASSISTANT_COLOR}Chatbot (thinking):{Style.RESET_ALL}{content}")
         
         return True, False
         
@@ -543,12 +562,32 @@ After tool execution, interpret results concisely without repeating obvious info
             conversation.append({"role": "user", "content": user_input})
 
             try:
+                # Check for pending think context from previous /think command
+                cache = load_cache()
+                pending_think = cache.get('_pending_think_context')
+                
+                # Prepare ollama.chat parameters
+                chat_params = {
+                    "model": model_name,
+                    "messages": conversation,
+                    "options": {"temperature": 0.1}  # Lower temperature for more deterministic responses
+                }
+                
+                # Include think context if available
+                if pending_think and pending_think.get('context'):
+                    chat_params["context"] = pending_think['context']
+                    
+                    # Add the previous thinking to conversation for transparency
+                    think_summary = f"[Previous thinking about '{pending_think['think_input']}']: {pending_think['think_output'][:100]}..."
+                    conversation.append({"role": "system", "content": f"Context from previous thinking: {think_summary}"})
+                    
+                    # Clear the pending context after using it
+                    if '_pending_think_context' in cache:
+                        del cache['_pending_think_context']
+                        save_cache(cache)
+                
                 # Generate response using Ollama API
-                response = ollama.chat(
-                    model=model_name,
-                    messages=conversation,
-                    options={"temperature": 0.1}  # Lower temperature for more deterministic responses
-                )
+                response = ollama.chat(**chat_params)
 
                 # Get the response content
                 content = response["message"]["content"]
