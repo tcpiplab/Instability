@@ -9,7 +9,7 @@ import os
 import sys
 import json
 import time
-from utils import extract_thinking
+from utils import extract_thinking, colorize_numbers
 from typing import Dict, List, Any, Optional, Tuple
 from colorama import Fore, Style
 
@@ -175,16 +175,26 @@ def print_tool_execution(tool_name: str) -> None:
 
 
 def print_assistant(message: str) -> None:
-    """Print the assistant's response with Markdown support"""
+    """Print the assistant's response with Markdown support and number colorization"""
+    # Apply number colorization
+    colored_message = colorize_numbers(message)
+    
     if RICH_AVAILABLE and any(md_marker in message for md_marker in ["```", "*", "_", "##", "`"]):
         # Print the prefix with colorama
         print(f"{ASSISTANT_COLOR}Chatbot: {Style.RESET_ALL}", end="")
-        # Use Rich to render the Markdown content
-        md = Markdown(message)
+        # Use Rich to render the Markdown content with colored numbers
+        md = Markdown(colored_message)
         console.print(md)
     else:
-        # Regular text, use normal print
-        print(f"{ASSISTANT_COLOR}Chatbot: {Style.RESET_ALL}{message}")
+        # For non-markdown text, we can still apply Rich markup if available
+        if RICH_AVAILABLE:
+            from rich.text import Text
+            print(f"{ASSISTANT_COLOR}Chatbot: {Style.RESET_ALL}", end="")
+            text = Text.from_markup(colored_message)
+            console.print(text)
+        else:
+            # Fallback to regular print without Rich markup
+            print(f"{ASSISTANT_COLOR}Chatbot: {Style.RESET_ALL}{message}")
 
 
 def print_planning(message: str) -> None:
@@ -501,13 +511,21 @@ After tool execution, interpret results concisely without repeating obvious info
                                 stream=True
                             )
 
-                            # Collect streamed response and display in real-time
+                            # Collect streamed response and display in real-time with number colorization
                             print(f"{ASSISTANT_COLOR}Chatbot: {Style.RESET_ALL}", end="", flush=True)
                             full_response = ""
                             for chunk in follow_up_stream:
                                 content_chunk = chunk["message"]["content"]
                                 full_response += content_chunk
-                                print(content_chunk, end="", flush=True)
+                                
+                                # Apply number colorization to chunk if Rich is available
+                                if RICH_AVAILABLE:
+                                    from rich.text import Text
+                                    colored_chunk = colorize_numbers(content_chunk)
+                                    chunk_text = Text.from_markup(colored_chunk)
+                                    console.print(chunk_text, end="")
+                                else:
+                                    print(content_chunk, end="", flush=True)
                             print()  # New line when streaming is complete
 
                             # Add complete response to conversation
@@ -529,24 +547,27 @@ After tool execution, interpret results concisely without repeating obvious info
                         conversation.append({"role": "system", "content": error_msg})
 
                 else:
-
-                    # No tool call - check if this is a network-related question and add warning
-                    network_keywords = ['ping', 'network', 'connectivity', 'internet', 'dns', 'ip', 'connection', 'latency', 'speed', 'bandwidth', 'traceroute', 'route', 'packet', 'loss', 'nat', 'firewall', 'port', 'external', 'local']
+                    # No tool call - check if this is a network-related question
+                    network_keywords = ['ping', 'network', 'connectivity', 'internet', 'dns', 'ip', 'connection', 'latency', 'speed', 'bandwidth', 'traceroute', 'route', 'packet', 'loss', 'nat', 'firewall', 'port', 'external', 'local', 'scan', 'nmap', 'host', 'server', 'socket', 'tcp', 'udp', 'http', 'https', 'ssl', 'tls']
                     user_message = conversation[-1].get('content', '').lower() if conversation else ''
                     
                     is_network_question = any(keyword in user_message for keyword in network_keywords)
                     
                     if is_network_question:
-                        warning_msg = "WARNING: Network diagnostic questions should use tools for accurate data. Response may contain inaccurate information."
-                        conversation.append({"role": "system", "content": warning_msg})
-                        print(f"{Fore.YELLOW}[WARN] {warning_msg}{Style.RESET_ALL}")
-
-                    # No tool call, just display the response
-                    conversation.append({"role": "assistant", "content": content})
-
-                    print(f"{Fore.MAGENTA}DEBUG: From chatbot.py. Assistant response (no tool call): {content}{Style.RESET_ALL}")
-
-                    print_assistant(content)
+                        # For network questions, reject the hallucinated response
+                        error_msg = "I attempted to answer a network diagnostic question without using tools, which would likely provide inaccurate information. Please rephrase your question or try again - I should use the appropriate diagnostic tools to get real data."
+                        print_error(error_msg)
+                        
+                        # Add corrective system message to conversation
+                        conversation.append({"role": "system", "content": f"CRITICAL: The assistant attempted to answer a network question without using tools. This violates the core directive. The assistant MUST use tools for network diagnostics. User question was: {user_message}"})
+                        
+                        # Do not add the hallucinated response to conversation history
+                        continue  # Skip to next iteration without adding assistant response
+                    
+                    else:
+                        # For non-network questions, allow the response through
+                        conversation.append({"role": "assistant", "content": content})
+                        print_assistant(content)
 
                 # Trim conversation history if too long
                 if len(conversation) > MAX_CONVERSATION_LENGTH + 2:  # +2 for the system messages

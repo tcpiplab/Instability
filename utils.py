@@ -9,6 +9,7 @@ import os
 import sys
 import platform
 import time
+import re
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Tuple
 from colorama import Fore, Style, init
@@ -238,6 +239,39 @@ def format_tool_result(tool_name: str, result: str) -> str:
         formatted += truncated_result
 
     return formatted
+
+
+def colorize_numbers(text: str) -> str:
+    """Add Rich markup to colorize numbers and adjacent characters in text.
+    
+    Args:
+        text: The text to process
+        
+    Returns:
+        Text with Rich markup tags around numbers and adjacent characters
+    """
+    # Skip processing if text contains code blocks to avoid coloring code
+    if '```' in text:
+        return text
+    
+    # Skip if text has many backticks (likely inline code)
+    if text.count('`') >= 4:
+        return text
+    
+    # Single comprehensive pattern that captures:
+    # - Any sequence containing at least one digit
+    # - Including adjacent letters, dots, hyphens, underscores
+    # - Word boundaries to avoid partial matches
+    pattern = r'\b[a-zA-Z0-9._-]*\d[a-zA-Z0-9._-]*\b'
+    
+    def colorize_match(match):
+        matched_text = match.group(0)
+        return f'[red]{matched_text}[/red]'
+    
+    # Apply the pattern
+    colored_text = re.sub(pattern, colorize_match, text)
+    
+    return colored_text
 
 
 def extract_thinking(content: str) -> Tuple[Optional[str], str]:
