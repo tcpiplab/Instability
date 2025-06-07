@@ -367,13 +367,7 @@ def _handle_think_command(think_input: str) -> Tuple[bool, bool]:
         # Build startup info for thinking context
         startup_info = "No system startup information available."
         if startup_context:
-            startup_info = f"""
-SYSTEM STATUS: Based on v3 startup sequence:
-- Startup ID: {startup_context.get('startup_id', 'unknown')}
-- Overall Status: {'SUCCESS' if startup_context.get('success') else 'DEGRADED MODE'}
-- Tool Inventory: {len(startup_context.get('phases', {}).get('tool_inventory', {}).get('tools', {}))} tools scanned
-- Internet Connectivity: {startup_context.get('phases', {}).get('internet_connectivity', {}).get('status', 'unknown')}
-"""
+            startup_info = _build_detailed_startup_info(startup_context)
         
         # Create a thinking-only conversation context
         think_conversation = [
@@ -443,13 +437,7 @@ def start_interactive_session(model_name: str = DEFAULT_MODEL, startup_context: 
     # Build startup context information for the chatbot
     startup_info = ""
     if startup_context:
-        startup_info = f"""
-SYSTEM STATUS: Based on v3 startup sequence:
-- Startup ID: {startup_context.get('startup_id', 'unknown')}
-- Overall Status: {'SUCCESS' if startup_context.get('success') else 'DEGRADED MODE'}
-- Tool Inventory: {len(startup_context.get('phases', {}).get('tool_inventory', {}).get('tools', {}))} tools scanned
-- Internet Connectivity: {startup_context.get('phases', {}).get('internet_connectivity', {}).get('status', 'unknown')}
-"""
+        startup_info = _build_detailed_startup_info(startup_context)
 
     # Initialize conversation history
     conversation = [
@@ -687,6 +675,131 @@ After tool execution, interpret results concisely without repeating obvious info
     finally:
         # Save cache before exiting
         save_cache(cache)
+
+
+def _build_detailed_startup_info(startup_context: Dict[str, Any]) -> str:
+    """Build detailed startup information from v3 startup context"""
+    if not startup_context:
+        return "No system startup information available."
+    
+    phases = startup_context.get('phases', {})
+    
+    # Overall status
+    overall_status = 'SUCCESS' if startup_context.get('success') else 'DEGRADED MODE'
+    startup_id = startup_context.get('startup_id', 'unknown')
+    duration = startup_context.get('total_duration', 0.0)
+    
+    # Phase 1: Core System details
+    core_system = phases.get('core_system', {})
+    core_checks = core_system.get('checks', {})
+    
+    # OS Information
+    os_check = core_checks.get('os_detection', {})
+    os_result = os_check.get('result', {})
+    os_name = f"{os_result.get('system', 'Unknown')} {os_result.get('release', '')}"
+    python_version = os_result.get('python_version', 'Unknown')
+    
+    # Ollama connectivity
+    ollama_check = core_checks.get('ollama_connectivity', {})
+    ollama_result = ollama_check.get('result', {})
+    ollama_available = ollama_result.get('available', False)
+    ollama_models = ollama_result.get('models', 0)
+    
+    # Network interfaces and local IP
+    local_ip_check = core_checks.get('local_ip', {})
+    local_ip = local_ip_check.get('result', 'Unknown')
+    
+    interfaces_check = core_checks.get('network_interfaces', {})
+    interfaces = interfaces_check.get('result', [])
+    active_interfaces = [iface['name'] for iface in interfaces if iface.get('status') == 'up']
+    
+    # Phase 2: Internet connectivity details  
+    internet = phases.get('internet_connectivity', {})
+    internet_checks = internet.get('checks', {})
+    
+    # External IP
+    external_ip_check = internet_checks.get('external_ip', {})
+    external_ip = external_ip_check.get('result', 'Unknown')
+    
+    # DNS resolution
+    dns_check = internet_checks.get('dns_resolution', {})
+    dns_result = dns_check.get('result', {})
+    dns_servers_working = dns_result.get('servers_working', 0)
+    
+    # Web connectivity
+    web_check = internet_checks.get('web_connectivity', {})
+    web_result = web_check.get('result', {})
+    sites_reachable = web_result.get('sites_reachable', 0)
+    
+    # Phase 3: Tool inventory
+    tools_phase = phases.get('tool_inventory', {})
+    tools_found = tools_phase.get('tools_found', 0)
+    tools_missing = tools_phase.get('tools_missing', 0)
+    critical_missing = tools_phase.get('critical_missing', [])
+    
+    # Phase 4: Target scope  
+    scope_phase = phases.get('target_scope', {})
+    scope_loaded = scope_phase.get('scope_loaded', False)
+    scope_type = scope_phase.get('scope_type', 'Unknown')
+    targets_defined = scope_phase.get('targets_defined', 0)
+    
+    # Additional runtime info (get model and context info from current session)
+    current_model = DEFAULT_MODEL
+    try:
+        # Try to get context window info for the current model
+        model_info = ollama.show(current_model)
+        context_size = model_info.get('details', {}).get('parameter_size', 'Unknown')
+    except:
+        context_size = 'Unknown'
+    
+    # Build comprehensive startup info
+    startup_info = f"""
+SYSTEM STATUS: Instability v3 Startup Report
+==========================================
+Startup ID: {startup_id}
+Overall Status: {overall_status}
+Total Duration: {duration:.2f} seconds
+
+OPERATING SYSTEM:
+- OS: {os_name.strip()}
+- Python: {python_version}
+- Architecture: {os_result.get('machine', 'Unknown')}
+
+NETWORK CONFIGURATION:
+- Local IP: {local_ip}
+- External IP: {external_ip}
+- Active Interfaces: {', '.join(active_interfaces) if active_interfaces else 'None detected'}
+- Interface Count: {len(interfaces)}
+
+OLLAMA API STATUS:
+- Available: {'Yes' if ollama_available else 'No'}
+- Models Available: {ollama_models}
+- Current Model: {current_model}
+- Context Window: {context_size}
+
+INTERNET CONNECTIVITY:
+- DNS Servers Working: {dns_servers_working}/3
+- Web Sites Reachable: {sites_reachable}/3
+- Overall Status: {internet.get('status', 'unknown')}
+
+PENTESTING TOOLS:
+- Tools Found: {tools_found}
+- Tools Missing: {tools_missing}
+- Critical Missing: {', '.join(critical_missing) if critical_missing else 'None'}
+
+TARGET SCOPE:
+- Scope Loaded: {'Yes' if scope_loaded else 'No'}
+- Scope Type: {scope_type}
+- Targets Defined: {targets_defined}
+
+PHASE STATUSES:
+- Core System: {core_system.get('status', 'unknown')}
+- Internet: {internet.get('status', 'unknown')}
+- Tools: {tools_phase.get('status', 'unknown')}
+- Scope: {scope_phase.get('status', 'unknown')}
+"""
+    
+    return startup_info
 
 
 def _extract_planning_section(content: str) -> Optional[str]:
