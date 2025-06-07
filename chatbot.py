@@ -93,7 +93,7 @@ def setup_readline():
     # Command completion function
     def completer(text, state):
         # Basic commands
-        commands = ['/help', '/exit', '/quit', '/clear', '/tools']
+        commands = ['/help', '/exit', '/quit', '/clear', '/tools', '/think']
 
         # Add tool commands
         tools = get_available_tools()
@@ -294,6 +294,7 @@ def handle_command(command: str, cache: Dict[str, Any]) -> Tuple[bool, bool]:
         print(f"  {USER_COLOR}/clear{Style.RESET_ALL} - Clear conversation history")
         print(f"  {USER_COLOR}/tools{Style.RESET_ALL} - List available diagnostic tools")
         print(f"  {USER_COLOR}/cache{Style.RESET_ALL} - Display cached data")
+        print(f"  {USER_COLOR}/think{Style.RESET_ALL} - Think about input without running tools")
         print(f"  {USER_COLOR}/<tool>{Style.RESET_ALL} - Run a specific tool directly")
         return True, False
 
@@ -315,6 +316,15 @@ def handle_command(command: str, cache: Dict[str, Any]) -> Tuple[bool, bool]:
             if not key.startswith('_'):  # Skip internal keys
                 print(f"  {TOOL_COLOR}{key}{Style.RESET_ALL}: {value}")
         return True, False
+
+    elif cmd.startswith('/think '):
+        # Handle /think command - think about the input without running tools
+        think_input = cmd[7:].strip()  # Remove '/think ' prefix
+        if think_input:
+            return _handle_think_command(think_input)
+        else:
+            print_error("Please provide input after /think command")
+            return True, False
 
     elif cmd.startswith('/'):
         # Check if it's a direct tool call
@@ -343,25 +353,120 @@ def handle_command(command: str, cache: Dict[str, Any]) -> Tuple[bool, bool]:
     return False, False
 
 
-def start_interactive_session(model_name: str = DEFAULT_MODEL) -> None:
+def _handle_think_command(think_input: str) -> Tuple[bool, bool]:
+    """Handle the /think command - analyze input without executing tools
+    
+    Returns:
+        Tuple of (handled, should_exit)
+    """
+    try:
+        # Load cache to get startup context
+        cache = load_cache()
+        startup_context = cache.get('_startup_context', {})
+        
+        # Build startup info for thinking context
+        startup_info = "No system startup information available."
+        if startup_context:
+            startup_info = _build_detailed_startup_info(startup_context)
+        
+        # Create a thinking-only conversation context
+        think_conversation = [
+            {
+                "role": "system",
+                "content": f"""You are a network diagnostics and cybersecurity specialist. The user has asked you to THINK about their question or situation.
+
+IMPORTANT: You should ONLY think, analyze, and plan. Do NOT execute any tools or include tool calls in your response.
+
+At minimum, what you know about the system state is:
+{startup_info}
+
+Your task is to:
+1. Analyze the user's input
+2. Think about potential issues, hypotheses, or next steps, if applicable
+3. Provide insights based on your expertise
+
+Be thoughtful and analytical. Consider multiple angles and possibilities. You can speculate about tools that might not even be installed yet.
+
+Do not be afraid to think outside the box, but remember: don't be overly verbose. Keep your thinking concise and focused.
+
+DO NOT include any "TOOL:" calls or "ARGS:" sections in your response.
+"""
+            },
+            {
+                "role": "user", 
+                "content": f"Please think about this: {think_input}"
+            }
+        ]
+        
+        # Generate thinking response using Ollama API
+        response = ollama.chat(
+            model=DEFAULT_MODEL,
+            messages=think_conversation,
+            options={"temperature": 0.7}  # Higher temperature for more creative thinking
+        )
+        
+        # Get the response content
+        content = response["message"]["content"]
+        
+        # Save the thinking context for the next user interaction
+        # Store both the context and the thinking content in cache
+        cache = load_cache()
+        cache['_pending_think_context'] = {
+            'context': response.get('context'),
+            'think_input': think_input,
+            'think_output': content
+        }
+        save_cache(cache)
+        
+        # Display the thinking output with number colorization
+        colored_content = colorize_numbers(content)
+        
+        if RICH_AVAILABLE:
+            from rich.text import Text
+            print(f"{ASSISTANT_COLOR}Chatbot (thinking):{Style.RESET_ALL}", end="")
+            text = Text.from_markup(colored_content)
+            console.print(text)
+        else:
+            # Fallback to regular print without Rich markup
+            print(f"{ASSISTANT_COLOR}Chatbot (thinking):{Style.RESET_ALL}{content}")
+        
+        return True, False
+        
+    except Exception as e:
+        print_error(f"{ERROR_COLOR}Error in think command: {e}{Style.RESET_ALL}")
+        return True, False
+
+
+def start_interactive_session(model_name: str = DEFAULT_MODEL, startup_context: Optional[Dict[str, Any]] = None) -> None:
     """Start the interactive chatbot session"""
     # Setup readline for command history and completion
     setup_readline()
 
     # Load cache
     cache = load_cache()
+    
+    # Store startup context in cache for use by /think command
+    if startup_context:
+        cache['_startup_context'] = startup_context
+        save_cache(cache)
 
     # Print welcome message
     print_welcome()
+
+    # Build startup context information for the chatbot
+    startup_info = ""
+    if startup_context:
+        startup_info = _build_detailed_startup_info(startup_context)
 
     # Initialize conversation history
     conversation = [
         {
             "role": "system",
-            "content": """You are a network diagnostics and cybersecurity specialist working with an experienced security admin/pentester. 
+            "content": f"""You are a network diagnostics and cybersecurity specialist working with an experienced security admin/pentester. 
             You can also call tools for network diagnosis, security scanning, and for pentest reconnaissance.
             You have access to various networking tools that can be called to diagnose problems or to do pentest reconnaissance and security scanning.
             You are capable of reasoning about network and security issues, but you must use the tools to get real data.
+{startup_info}
 
 IMPORTANT: For any network-related questions about connectivity, DNS, ping, latency, IP addresses, routing, or network performance, you MUST use the appropriate tools to get real data. Do not guess or provide generic answers without using tools. 
 
@@ -372,7 +477,7 @@ CRITICAL: NEVER attempt to infer NAT status from speed test results, responsiven
 When you need specific information, you can call a tool using this format:
 
 TOOL: tool_name
-ARGS: {"arg_name": "value"} (or {} if no arguments needed)
+ARGS: {{"arg_name": "value"}} (or {{}} if no arguments needed)
 
 STOP after the tool call. Do NOT include any text like "Tool result:", example output, or sample data. The system will execute the tool and provide the real result.
 
@@ -457,12 +562,32 @@ After tool execution, interpret results concisely without repeating obvious info
             conversation.append({"role": "user", "content": user_input})
 
             try:
+                # Check for pending think context from previous /think command
+                cache = load_cache()
+                pending_think = cache.get('_pending_think_context')
+                
+                # Prepare ollama.chat parameters
+                chat_params = {
+                    "model": model_name,
+                    "messages": conversation,
+                    "options": {"temperature": 0.1}  # Lower temperature for more deterministic responses
+                }
+                
+                # Include think context if available
+                if pending_think and pending_think.get('context'):
+                    chat_params["context"] = pending_think['context']
+                    
+                    # Add the previous thinking to conversation for transparency
+                    think_summary = f"[Previous thinking about '{pending_think['think_input']}']: {pending_think['think_output'][:100]}..."
+                    conversation.append({"role": "system", "content": f"Context from previous thinking: {think_summary}"})
+                    
+                    # Clear the pending context after using it
+                    if '_pending_think_context' in cache:
+                        del cache['_pending_think_context']
+                        save_cache(cache)
+                
                 # Generate response using Ollama API
-                response = ollama.chat(
-                    model=model_name,
-                    messages=conversation,
-                    options={"temperature": 0.1}  # Lower temperature for more deterministic responses
-                )
+                response = ollama.chat(**chat_params)
 
                 # Get the response content
                 content = response["message"]["content"]
@@ -589,6 +714,131 @@ After tool execution, interpret results concisely without repeating obvious info
     finally:
         # Save cache before exiting
         save_cache(cache)
+
+
+def _build_detailed_startup_info(startup_context: Dict[str, Any]) -> str:
+    """Build detailed startup information from v3 startup context"""
+    if not startup_context:
+        return "No system startup information available."
+    
+    phases = startup_context.get('phases', {})
+    
+    # Overall status
+    overall_status = 'SUCCESS' if startup_context.get('success') else 'DEGRADED MODE'
+    startup_id = startup_context.get('startup_id', 'unknown')
+    duration = startup_context.get('total_duration', 0.0)
+    
+    # Phase 1: Core System details
+    core_system = phases.get('core_system', {})
+    core_checks = core_system.get('checks', {})
+    
+    # OS Information
+    os_check = core_checks.get('os_detection', {})
+    os_result = os_check.get('result', {})
+    os_name = f"{os_result.get('system', 'Unknown')} {os_result.get('release', '')}"
+    python_version = os_result.get('python_version', 'Unknown')
+    
+    # Ollama connectivity
+    ollama_check = core_checks.get('ollama_connectivity', {})
+    ollama_result = ollama_check.get('result', {})
+    ollama_available = ollama_result.get('available', False)
+    ollama_models = ollama_result.get('models', 0)
+    
+    # Network interfaces and local IP
+    local_ip_check = core_checks.get('local_ip', {})
+    local_ip = local_ip_check.get('result', 'Unknown')
+    
+    interfaces_check = core_checks.get('network_interfaces', {})
+    interfaces = interfaces_check.get('result', [])
+    active_interfaces = [iface['name'] for iface in interfaces if iface.get('status') == 'up']
+    
+    # Phase 2: Internet connectivity details  
+    internet = phases.get('internet_connectivity', {})
+    internet_checks = internet.get('checks', {})
+    
+    # External IP
+    external_ip_check = internet_checks.get('external_ip', {})
+    external_ip = external_ip_check.get('result', 'Unknown')
+    
+    # DNS resolution
+    dns_check = internet_checks.get('dns_resolution', {})
+    dns_result = dns_check.get('result', {})
+    dns_servers_working = dns_result.get('servers_working', 0)
+    
+    # Web connectivity
+    web_check = internet_checks.get('web_connectivity', {})
+    web_result = web_check.get('result', {})
+    sites_reachable = web_result.get('sites_reachable', 0)
+    
+    # Phase 3: Tool inventory
+    tools_phase = phases.get('tool_inventory', {})
+    tools_found = tools_phase.get('tools_found', 0)
+    tools_missing = tools_phase.get('tools_missing', 0)
+    critical_missing = tools_phase.get('critical_missing', [])
+    
+    # Phase 4: Target scope  
+    scope_phase = phases.get('target_scope', {})
+    scope_loaded = scope_phase.get('scope_loaded', False)
+    scope_type = scope_phase.get('scope_type', 'Unknown')
+    targets_defined = scope_phase.get('targets_defined', 0)
+    
+    # Additional runtime info (get model and context info from current session)
+    current_model = DEFAULT_MODEL
+    try:
+        # Try to get context window info for the current model
+        model_info = ollama.show(current_model)
+        context_size = model_info.get('details', {}).get('parameter_size', 'Unknown')
+    except:
+        context_size = 'Unknown'
+    
+    # Build comprehensive startup info
+    startup_info = f"""
+SYSTEM STATUS: Instability v3 Startup Report
+==========================================
+Startup ID: {startup_id}
+Overall Status: {overall_status}
+Total Duration: {duration:.2f} seconds
+
+OPERATING SYSTEM:
+- OS: {os_name.strip()}
+- Python: {python_version}
+- Architecture: {os_result.get('machine', 'Unknown')}
+
+NETWORK CONFIGURATION:
+- Local IP: {local_ip}
+- External IP: {external_ip}
+- Active Interfaces: {', '.join(active_interfaces) if active_interfaces else 'None detected'}
+- Interface Count: {len(interfaces)}
+
+OLLAMA API STATUS:
+- Available: {'Yes' if ollama_available else 'No'}
+- Models Available: {ollama_models}
+- Current Model: {current_model}
+- Context Window: {context_size}
+
+INTERNET CONNECTIVITY:
+- DNS Servers Working: {dns_servers_working}/3
+- Web Sites Reachable: {sites_reachable}/3
+- Overall Status: {internet.get('status', 'unknown')}
+
+PENTESTING TOOLS:
+- Tools Found: {tools_found}
+- Tools Missing: {tools_missing}
+- Critical Missing: {', '.join(critical_missing) if critical_missing else 'None'}
+
+TARGET SCOPE:
+- Scope Loaded: {'Yes' if scope_loaded else 'No'}
+- Scope Type: {scope_type}
+- Targets Defined: {targets_defined}
+
+PHASE STATUSES:
+- Core System: {core_system.get('status', 'unknown')}
+- Internet: {internet.get('status', 'unknown')}
+- Tools: {tools_phase.get('status', 'unknown')}
+- Scope: {scope_phase.get('status', 'unknown')}
+"""
+    
+    return startup_info
 
 
 def _extract_planning_section(content: str) -> Optional[str]:
