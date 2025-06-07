@@ -9,6 +9,7 @@ import os
 import sys
 import platform
 import time
+import re
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Tuple
 from colorama import Fore, Style, init
@@ -238,6 +239,39 @@ def format_tool_result(tool_name: str, result: str) -> str:
         formatted += truncated_result
 
     return formatted
+
+
+def colorize_numbers(text: str) -> str:
+    """Add Rich markup to colorize numbers in text.
+    
+    Args:
+        text: The text to process
+        
+    Returns:
+        Text with Rich markup tags around numbers
+    """
+    # Skip processing if text contains code blocks to avoid coloring code
+    if '```' in text:
+        return text
+    
+    # Skip if text has many backticks (likely inline code)
+    if text.count('`') >= 4:
+        return text
+    
+    # Pattern for different number types
+    patterns = [
+        # List item numbers (e.g., "1. ", "12. ") - must be at start of line or after whitespace
+        (r'^(\s*)(\d+)(\.\s)', r'\1[red]\2[/red]\3'),
+        # Floating point numbers (e.g., "3.14", "0.5")
+        (r'\b(\d+)(\.\d+)\b', r'[red]\1\2[/red]'),
+        # Integers not followed by a dot (to avoid double-processing list items)
+        (r'\b(\d+)(?!\.\d|\.\s)', r'[red]\1[/red]'),
+    ]
+    
+    for pattern, replacement in patterns:
+        text = re.sub(pattern, replacement, text, flags=re.MULTILINE)
+    
+    return text
 
 
 def extract_thinking(content: str) -> Tuple[Optional[str], str]:

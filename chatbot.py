@@ -9,7 +9,7 @@ import os
 import sys
 import json
 import time
-from utils import extract_thinking
+from utils import extract_thinking, colorize_numbers
 from typing import Dict, List, Any, Optional, Tuple
 from colorama import Fore, Style
 
@@ -175,16 +175,26 @@ def print_tool_execution(tool_name: str) -> None:
 
 
 def print_assistant(message: str) -> None:
-    """Print the assistant's response with Markdown support"""
+    """Print the assistant's response with Markdown support and number colorization"""
+    # Apply number colorization
+    colored_message = colorize_numbers(message)
+    
     if RICH_AVAILABLE and any(md_marker in message for md_marker in ["```", "*", "_", "##", "`"]):
         # Print the prefix with colorama
         print(f"{ASSISTANT_COLOR}Chatbot: {Style.RESET_ALL}", end="")
-        # Use Rich to render the Markdown content
-        md = Markdown(message)
+        # Use Rich to render the Markdown content with colored numbers
+        md = Markdown(colored_message)
         console.print(md)
     else:
-        # Regular text, use normal print
-        print(f"{ASSISTANT_COLOR}Chatbot: {Style.RESET_ALL}{message}")
+        # For non-markdown text, we can still apply Rich markup if available
+        if RICH_AVAILABLE:
+            from rich.text import Text
+            print(f"{ASSISTANT_COLOR}Chatbot: {Style.RESET_ALL}", end="")
+            text = Text.from_markup(colored_message)
+            console.print(text)
+        else:
+            # Fallback to regular print without Rich markup
+            print(f"{ASSISTANT_COLOR}Chatbot: {Style.RESET_ALL}{message}")
 
 
 def print_planning(message: str) -> None:
@@ -501,13 +511,21 @@ After tool execution, interpret results concisely without repeating obvious info
                                 stream=True
                             )
 
-                            # Collect streamed response and display in real-time
+                            # Collect streamed response and display in real-time with number colorization
                             print(f"{ASSISTANT_COLOR}Chatbot: {Style.RESET_ALL}", end="", flush=True)
                             full_response = ""
                             for chunk in follow_up_stream:
                                 content_chunk = chunk["message"]["content"]
                                 full_response += content_chunk
-                                print(content_chunk, end="", flush=True)
+                                
+                                # Apply number colorization to chunk if Rich is available
+                                if RICH_AVAILABLE:
+                                    from rich.text import Text
+                                    colored_chunk = colorize_numbers(content_chunk)
+                                    chunk_text = Text.from_markup(colored_chunk)
+                                    console.print(chunk_text, end="")
+                                else:
+                                    print(content_chunk, end="", flush=True)
                             print()  # New line when streaming is complete
 
                             # Add complete response to conversation
