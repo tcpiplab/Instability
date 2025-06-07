@@ -39,9 +39,9 @@ def start_chatbot_mode(model_name=None):
         if not startup_results["success"]:
             print(f"{Fore.YELLOW}[WARN] Startup checks completed with warnings. Proceeding in degraded mode.{Style.RESET_ALL}")
         
-        # Start chatbot (v3 startup context integration to be added later)
+        # Start chatbot with v3 startup context integration
         from chatbot import start_interactive_session
-        start_interactive_session(model_name=model_name)
+        start_interactive_session(model_name=model_name, startup_context=startup_results)
     except ImportError as e:
         print(f"{Fore.RED}Error: Required module not found: {e}{Style.RESET_ALL}")
         print(f"{Fore.YELLOW}Ensure all v3 modules are properly installed.{Style.RESET_ALL}")

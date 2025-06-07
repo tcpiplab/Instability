@@ -93,7 +93,7 @@ def setup_readline():
     # Command completion function
     def completer(text, state):
         # Basic commands
-        commands = ['/help', '/exit', '/quit', '/clear', '/tools']
+        commands = ['/help', '/exit', '/quit', '/clear', '/tools', '/think']
 
         # Add tool commands
         tools = get_available_tools()
@@ -294,6 +294,7 @@ def handle_command(command: str, cache: Dict[str, Any]) -> Tuple[bool, bool]:
         print(f"  {USER_COLOR}/clear{Style.RESET_ALL} - Clear conversation history")
         print(f"  {USER_COLOR}/tools{Style.RESET_ALL} - List available diagnostic tools")
         print(f"  {USER_COLOR}/cache{Style.RESET_ALL} - Display cached data")
+        print(f"  {USER_COLOR}/think{Style.RESET_ALL} - Think about input without running tools")
         print(f"  {USER_COLOR}/<tool>{Style.RESET_ALL} - Run a specific tool directly")
         return True, False
 
@@ -315,6 +316,15 @@ def handle_command(command: str, cache: Dict[str, Any]) -> Tuple[bool, bool]:
             if not key.startswith('_'):  # Skip internal keys
                 print(f"  {TOOL_COLOR}{key}{Style.RESET_ALL}: {value}")
         return True, False
+
+    elif cmd.startswith('/think '):
+        # Handle /think command - think about the input without running tools
+        think_input = cmd[7:].strip()  # Remove '/think ' prefix
+        if think_input:
+            return _handle_think_command(think_input)
+        else:
+            print_error("Please provide input after /think command")
+            return True, False
 
     elif cmd.startswith('/'):
         # Check if it's a direct tool call
@@ -343,25 +353,113 @@ def handle_command(command: str, cache: Dict[str, Any]) -> Tuple[bool, bool]:
     return False, False
 
 
-def start_interactive_session(model_name: str = DEFAULT_MODEL) -> None:
+def _handle_think_command(think_input: str) -> Tuple[bool, bool]:
+    """Handle the /think command - analyze input without executing tools
+    
+    Returns:
+        Tuple of (handled, should_exit)
+    """
+    try:
+        # Load cache to get startup context
+        cache = load_cache()
+        startup_context = cache.get('_startup_context', {})
+        
+        # Build startup info for thinking context
+        startup_info = "No system startup information available."
+        if startup_context:
+            startup_info = f"""
+SYSTEM STATUS: Based on v3 startup sequence:
+- Startup ID: {startup_context.get('startup_id', 'unknown')}
+- Overall Status: {'SUCCESS' if startup_context.get('success') else 'DEGRADED MODE'}
+- Tool Inventory: {len(startup_context.get('phases', {}).get('tool_inventory', {}).get('tools', {}))} tools scanned
+- Internet Connectivity: {startup_context.get('phases', {}).get('internet_connectivity', {}).get('status', 'unknown')}
+"""
+        
+        # Create a thinking-only conversation context
+        think_conversation = [
+            {
+                "role": "system",
+                "content": f"""You are a network diagnostics and cybersecurity specialist. The user has asked you to THINK about their question or situation.
+
+IMPORTANT: You should ONLY think, analyze, and plan. Do NOT execute any tools or include tool calls in your response.
+
+At minimum, what you know about the system state is:
+{startup_info}
+
+Your task is to:
+1. Analyze the user's input
+2. Think about potential issues, hypotheses, or next steps, if applicable
+3. Provide insights based on your expertise
+
+Be thoughtful and analytical. Consider multiple angles and possibilities. You can speculate about tools that might not even be installed yet.
+
+Do not be afraid to think outside the box, but remember: don't be overly verbose. Keep your thinking concise and focused.
+
+DO NOT include any "TOOL:" calls or "ARGS:" sections in your response.
+"""
+            },
+            {
+                "role": "user", 
+                "content": f"Please think about this: {think_input}"
+            }
+        ]
+        
+        # Generate thinking response using Ollama API
+        response = ollama.chat(
+            model=DEFAULT_MODEL,
+            messages=think_conversation,
+            options={"temperature": 0.7}  # Higher temperature for more creative thinking
+        )
+        
+        # Get the response content
+        content = response["message"]["content"]
+        
+        # Display the thinking output
+        print(f"{ASSISTANT_COLOR}Chatbot (thinking):{Style.RESET_ALL}{content}")
+        
+        return True, False
+        
+    except Exception as e:
+        print_error(f"{ERROR_COLOR}Error in think command: {e}{Style.RESET_ALL}")
+        return True, False
+
+
+def start_interactive_session(model_name: str = DEFAULT_MODEL, startup_context: Optional[Dict[str, Any]] = None) -> None:
     """Start the interactive chatbot session"""
     # Setup readline for command history and completion
     setup_readline()
 
     # Load cache
     cache = load_cache()
+    
+    # Store startup context in cache for use by /think command
+    if startup_context:
+        cache['_startup_context'] = startup_context
+        save_cache(cache)
 
     # Print welcome message
     print_welcome()
+
+    # Build startup context information for the chatbot
+    startup_info = ""
+    if startup_context:
+        startup_info = f"""
+SYSTEM STATUS: Based on v3 startup sequence:
+- Startup ID: {startup_context.get('startup_id', 'unknown')}
+- Overall Status: {'SUCCESS' if startup_context.get('success') else 'DEGRADED MODE'}
+- Tool Inventory: {len(startup_context.get('phases', {}).get('tool_inventory', {}).get('tools', {}))} tools scanned
+- Internet Connectivity: {startup_context.get('phases', {}).get('internet_connectivity', {}).get('status', 'unknown')}
+"""
 
     # Initialize conversation history
     conversation = [
         {
             "role": "system",
-            "content": """You are a network diagnostics and cybersecurity specialist working with an experienced security admin/pentester. 
+            "content": f"""You are a network diagnostics and cybersecurity specialist working with an experienced security admin/pentester. 
             You can also call tools for network diagnosis, security scanning, and for pentest reconnaissance.
             You have access to various networking tools that can be called to diagnose problems or to do pentest reconnaissance and security scanning.
             You are capable of reasoning about network and security issues, but you must use the tools to get real data.
+{startup_info}
 
 IMPORTANT: For any network-related questions about connectivity, DNS, ping, latency, IP addresses, routing, or network performance, you MUST use the appropriate tools to get real data. Do not guess or provide generic answers without using tools. 
 
@@ -372,7 +470,7 @@ CRITICAL: NEVER attempt to infer NAT status from speed test results, responsiven
 When you need specific information, you can call a tool using this format:
 
 TOOL: tool_name
-ARGS: {"arg_name": "value"} (or {} if no arguments needed)
+ARGS: {{"arg_name": "value"}} (or {{}} if no arguments needed)
 
 STOP after the tool call. Do NOT include any text like "Tool result:", example output, or sample data. The system will execute the tool and provide the real result.
 
