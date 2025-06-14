@@ -327,33 +327,142 @@ def check_local_network() -> str:
         return f"Error checking local network: {Fore.RED}{e}{Style.RESET_ALL}"
 
 
+# WHOIS servers and their IP addresses with descriptions
+# Comprehensive list covering global IP allocation and domain registries
+WHOIS_SERVERS_DICT = {
+    "whois.apnic.net": (
+    "APNIC WHOIS server for IP address and AS number allocation in the Asia-Pacific region", "202.12.29.140"),
+    "whois.ripe.net": ("RIPE NCC WHOIS server for European IP addresses and AS number registrations", "193.0.6.135"),
+    "whois.arin.net": ("ARIN WHOIS server for North American IP address and ASN allocations", "199.212.0.43"),
+    "whois.afrinic.net": ("AFRINIC WHOIS server for African IP address space and AS number management", "196.216.2.2"),
+    "whois.lacnic.net": (
+    "LACNIC WHOIS server for Latin American and Caribbean IP address registrations", "200.3.14.10"),
+    "whois.pir.org": ("Public Interest Registry WHOIS server for dot ORG domain registrations", "199.19.56.1"),
+    "whois.educause.edu": (
+    "EDUCAUSE WHOIS server for dot EDU domain name registrations in United States", "192.52.178.30"),
+    "whois.iana.org": ("IANA WHOIS server for the root zone database and overall global IP address allocations to regional registries like ARIN and RIPE", "192.0.32.59"),
+    "riswhois.ripe.net": ("RIPE RIS WHOIS server for BGP routing information and analysis", "193.0.19.33"),
+    "whois.nic.mobi": ("Registry WHOIS server for dot MOBI top-level domain registrations", "194.169.218.57"),
+    "whois.verisign-grs.com": ("Verisign Global Registry WHOIS server for looking up dot COM and dot NET domains", "199.7.59.74"),
+    "whois.nic.google": ("Google Registry WHOIS server for Google-operated TLD registrations", "216.239.32.10"),
+    "whois.nic.io": ("Internet Computer Bureau WHOIS server for .io domain registrations", "193.223.78.42"),
+    "whois.nic.co": (".CO Internet S.A.S. WHOIS server for .co domain registrations", "156.154.100.224"),
+    "whois.nic.xyz": ("XYZ.COM LLC WHOIS server for .xyz domain registrations", "185.24.64.96"),
+    "whois.nic.club": (".CLUB Domains, LLC WHOIS server for .club domain registrations", "108.59.160.175"),
+    "whois.nic.info": ("Afilias WHOIS server for .info domain registrations", "199.19.56.1"),
+    "whois.nic.biz": ("Neustar WHOIS server for .biz domain registrations", "156.154.100.224"),
+    "whois.nic.us": ("NeuStar, Inc. WHOIS server for .us domain registrations", "156.154.100.224"),
+    "whois.nic.tv": ("Verisign WHOIS server for .tv domain registrations", "192.42.93.30"),
+    "whois.nic.asia": ("DotAsia WHOIS server for .asia domain registrations", "203.119.86.101"),
+    "whois.nic.me": ("doMEn WHOIS server for .me domain registrations", "185.24.64.96"),
+    "whois.nic.pro": ("RegistryPro WHOIS server for .pro domain registrations", "199.7.59.74"),
+    "whois.nic.museum": ("Museum Domain Management Association WHOIS server for .museum domain registrations", "130.242.24.5"),
+    "whois.nic.ai": ("Government of Anguilla WHOIS server for .ai domain registrations", "209.59.119.34"),
+    "whois.nic.de": ("DENIC eG WHOIS server for .de domain registrations", "81.91.164.5"),
+    "whois.registry.in": ("National Internet Exchange of India WHOIS server for .in domain registrations for India", "103.132.247.21"),
+    "whois.jprs.jp": ("Japan Registry Services Co., Ltd. WHOIS server for .jp domain registrations for Japan", "117.104.133.169"),
+    "whois.nic.fr": ("AFNIC WHOIS server for .fr domain registrations for France", "192.134.5.73"),
+    "whois.registro.br": ("Comitê Gestor da Internet no Brasil WHOIS server for .br domain registrations for Brazil", "200.160.2.3"),
+    "whois.nic.uk": ("Nominet UK WHOIS server for .uk domain registrations for the UK", "213.248.242.79"),
+    "whois.auda.org.au": ("auDA WHOIS server for .au domain registrations for Australia", "199.15.80.233"),
+    "whois.nic.it": ("IIT - CNR WHOIS server for .it domain registrations for Italy", "192.12.192.242"),
+    "whois.cira.ca": ("Canadian Internet Registration Authority WHOIS server for .ca domain registrations", "192.228.29.2"),
+    "whois.kr": ("KISA WHOIS server for .kr domain registrations for South Korea", "49.8.14.101")
+}
+
+
+def run_whois_command(whois_server_name: str, whois_server_ip: str) -> tuple:
+    """Run the whois command for a specific server and IP.
+    
+    Args:
+        whois_server_name: The hostname of the WHOIS server
+        whois_server_ip: The IP address of the WHOIS server
+        
+    Returns:
+        Tuple of (status, error) where status is "reachable" or "unreachable"
+    """
+    try:
+        if platform.system().lower() in ["darwin", "linux"]:
+            # Use socket connection test instead of actual whois command for speed
+            socket.create_connection((whois_server_name, 43), timeout=10)
+            return "reachable", None
+        elif platform.system().lower() == "windows":
+            # Use socket connection test for Windows too for consistency
+            socket.create_connection((whois_server_name, 43), timeout=10)
+            return "reachable", None
+    except Exception as e:
+        return "unreachable", str(e)
+
+
 @standardize_tool_output()
 def check_whois_servers() -> str:
-    """Check if WHOIS servers are reachable"""
-    if ORIGINAL_TOOLS_AVAILABLE:
-        try:
-            return whois_check_main(silent=True, polite=False)
-        except Exception as e:
-            print(f"{Fore.YELLOW}Error using original WHOIS check: {e}{Style.RESET_ALL}")
+    """Check if WHOIS servers are reachable (comprehensive global server list)"""
+    from utils import ollama_shorten_output
+    
+    reachable_servers = []
+    unreachable_servers = []
+    whois_results = ""
 
-    # Fallback implementation
-    whois_servers = [
-        "whois.verisign-grs.com",  # .com and .net
-        "whois.iana.org",  # IANA
-        "whois.pir.org",  # .org
-        "whois.nic.uk"  # .uk
-    ]
+    print(f"{Fore.CYAN}Starting WHOIS server monitoring at {time.ctime()}{Style.RESET_ALL}")
+    whois_results += f"Starting WHOIS server monitoring at {time.ctime()}\n"
+    
+    # Count servers being checked
+    num_servers = len(WHOIS_SERVERS_DICT)
+    whois_results += f"Checking reachability of {num_servers} WHOIS servers worldwide...\n\n"
 
-    results = []
-    for server in whois_servers:
-        try:
-            # WHOIS servers typically listen on port 43
-            socket.create_connection((server, 43), timeout=2)
-            results.append(f"{server}: Reachable")
-        except Exception:
-            results.append(f"{server}: Unreachable")
+    # First round of checks
+    for whois_server_name, (whois_server_description, ip) in WHOIS_SERVERS_DICT.items():
+        status, error = run_whois_command(whois_server_name, ip)
+        if status == "reachable":
+            reachable_servers.append((whois_server_name, whois_server_description))
+            whois_results += f"{whois_server_name} was reachable. It is the {whois_server_description}.\n"
+        else:
+            unreachable_servers.append((whois_server_name, error, whois_server_description))
+            whois_results += f"{whois_server_name} was unreachable. The error was: {error}. It is the {whois_server_description}.\n"
 
-    return "\n".join(results)
+    # Retry unreachable servers after a delay
+    if unreachable_servers:
+        whois_results += "\nRetrying unreachable servers...\n"
+        time.sleep(2)  # Wait 2 seconds before retrying (reduced from 5)
+
+        remaining_unreachable = []
+        for whois_server_name, error, whois_server_description in unreachable_servers:
+            # Get IP from the original dict for retry
+            ip = WHOIS_SERVERS_DICT[whois_server_name][1]
+            status, retry_error = run_whois_command(whois_server_name, ip)
+            if status == "reachable":
+                reachable_servers.append((whois_server_name, whois_server_description))
+                whois_results += f"After retrying, {whois_server_name} was reachable.\n"
+            else:
+                remaining_unreachable.append((whois_server_name, retry_error, whois_server_description))
+                whois_results += f"After retrying, {whois_server_name} was still unreachable. The error was: {retry_error}.\n"
+
+        unreachable_servers = remaining_unreachable
+
+    # Summary section
+    whois_results += f"\nReachable WHOIS Servers ({len(reachable_servers)}):\n"
+    for whois_server_name, _ in reachable_servers:
+        whois_results += f"- {whois_server_name}\n"
+
+    if len(unreachable_servers) == 0:
+        whois_results += "\nAll WHOIS servers were reachable.\n"
+    else:
+        whois_results += f"\nUnreachable WHOIS Servers ({len(unreachable_servers)}):\n"
+        for whois_server_name, error, _ in unreachable_servers:
+            whois_results += f"- {whois_server_name}: Unreachable\n"
+
+    # Apply Ollama shortening to reduce verbosity
+    try:
+        shortened_results = ollama_shorten_output(whois_results, max_lines=20, max_chars=1500)
+        return shortened_results
+    except Exception as e:
+        print(f"{Fore.YELLOW}Warning: Could not shorten WHOIS results: {e}{Style.RESET_ALL}")
+        # Fallback to simple truncation if Ollama fails
+        lines = whois_results.split('\n')
+        if len(lines) > 25:
+            truncated = '\n'.join(lines[:25]) + f"\n\n[Output truncated - showed first 25 lines of {len(lines)} total lines]"
+            return truncated
+        return whois_results
 
 
 def is_private_ip(ip: str) -> bool:
