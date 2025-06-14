@@ -9,7 +9,7 @@ import os
 import sys
 import json
 import time
-from utils import extract_thinking, colorize_numbers
+from utils import extract_thinking, colorize_numbers, ollama_shorten_output
 from typing import Dict, List, Any, Optional, Tuple
 from colorama import Fore, Style
 
@@ -409,7 +409,7 @@ DO NOT include any "TOOL:" calls or "ARGS:" sections in your response.
         content = response["message"]["content"]
         
         # Save the thinking context for the next user interaction
-        # Store both the context and the thinking content in cache
+        # Store both the context and the thinking content in cache (full content)
         cache = load_cache()
         cache['_pending_think_context'] = {
             'context': response.get('context'),
@@ -418,8 +418,11 @@ DO NOT include any "TOOL:" calls or "ARGS:" sections in your response.
         }
         save_cache(cache)
         
-        # Display the thinking output with number colorization
-        colored_content = colorize_numbers(content)
+        # Apply AI-powered shortening for display (but keep full content in cache)
+        shortened_content = ollama_shorten_output(content)
+        
+        # Display the shortened thinking output with number colorization
+        colored_content = colorize_numbers(shortened_content)
         
         if RICH_AVAILABLE:
             from rich.text import Text
@@ -428,7 +431,7 @@ DO NOT include any "TOOL:" calls or "ARGS:" sections in your response.
             console.print(text)
         else:
             # Fallback to regular print without Rich markup
-            print(f"{ASSISTANT_COLOR}Chatbot (thinking):{Style.RESET_ALL}{content}")
+            print(f"{ASSISTANT_COLOR}Chatbot (thinking):{Style.RESET_ALL}{shortened_content}")
         
         return True, False
         

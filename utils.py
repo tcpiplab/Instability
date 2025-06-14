@@ -188,8 +188,80 @@ def format_output_to_width(text: str, width: Optional[int] = None) -> str:
     return '\n'.join(result)
 
 
-def truncate_long_output(text: str, max_lines: int = 15, max_chars: int = 1000) -> str:
-    """Truncate long output to avoid flooding the terminal
+def ollama_shorten_output(text: str, max_lines: int = 15, max_chars: int = 1000) -> str:
+    """Use Ollama API to intelligently shorten long output for terminal display
+
+    Args:
+        text: The text to shorten
+        max_lines: Maximum number of lines to show (fallback limit)
+        max_chars: Maximum number of characters to show (fallback limit)
+
+    Returns:
+        AI-shortened text or fallback truncated text if Ollama unavailable
+    """
+    # Check if text is short enough already
+    lines = text.split('\n')
+    if len(lines) <= max_lines and len(text) <= max_chars:
+        return text
+    
+    # Try Ollama shortening first
+    try:
+        import ollama
+        from config import OLLAMA_DEFAULT_MODEL
+        
+        # Use the same model as the main chatbot to avoid hallucination
+        shortening_model = OLLAMA_DEFAULT_MODEL
+        
+        # Create a shortening prompt for postgraduate level
+        shortening_conversation = [
+            {
+                "role": "system",
+                "content": """You are a technical writing assistant. Your task is to shorten and improve text while maintaining all essential information and technical accuracy.
+
+Requirements:
+- Write at postgraduate master's level (sophisticated but clear language)
+- Preserve all critical technical details, numbers, and findings
+- Remove redundancy and verbose explanations
+- Use precise, professional terminology
+- Maintain logical flow and structure
+- Keep diagnostic results, error messages, and specific data intact
+- Target output should be roughly 40-50% of original length
+
+CRITICAL: Output ONLY the shortened text. Do not include any preamble, introduction, or explanation about what you did. Start directly with the shortened content."""
+            },
+            {
+                "role": "user", 
+                "content": f"Shorten this technical output while preserving all essential information:\n\n{text}"
+            }
+        ]
+        
+        # Call Ollama with llama3.1:8b for better text processing
+        response = ollama.chat(
+            model=shortening_model,
+            messages=shortening_conversation,
+            options={
+                "temperature": 0.1,  # Low temperature for consistent, factual shortening
+                "top_p": 0.9
+            }
+        )
+        
+        shortened_text = response["message"]["content"].strip()
+        
+        # Verify the shortened text is actually shorter
+        if len(shortened_text) < len(text):
+            return shortened_text
+        else:
+            # If not shorter, fall back to truncation
+            return truncate_long_output_fallback(text, max_lines, max_chars)
+            
+    except Exception as e:
+        # Fallback to original truncation method if Ollama fails
+        print(f"{WARNING_COLOR}Ollama shortening failed ({e}), using fallback truncation{Style.RESET_ALL}")
+        return truncate_long_output_fallback(text, max_lines, max_chars)
+
+
+def truncate_long_output_fallback(text: str, max_lines: int = 15, max_chars: int = 1000) -> str:
+    """Fallback truncation method (original implementation)
 
     Args:
         text: The text to truncate
@@ -212,6 +284,12 @@ def truncate_long_output(text: str, max_lines: int = 15, max_chars: int = 1000) 
         return text[:max_chars] + f"... (truncated, {len(text) - max_chars} more characters)"
 
     return text
+
+
+# Legacy alias for backward compatibility
+def truncate_long_output(text: str, max_lines: int = 15, max_chars: int = 1000) -> str:
+    """Legacy alias - now uses Ollama-based shortening"""
+    return ollama_shorten_output(text, max_lines, max_chars)
 
 
 # String formatting utilities

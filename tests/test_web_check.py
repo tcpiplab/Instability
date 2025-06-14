@@ -97,7 +97,16 @@ def test_network_diagnostics_check_websites():
     try:
         result = check_websites()
         print(f"{Fore.GREEN}Success: check_websites executed successfully{Style.RESET_ALL}")
-        print(f"Result excerpt: {result[:100]}...")
+        
+        # Handle standardized output format - extract the actual result
+        if isinstance(result, dict) and 'stdout' in result:
+            result_text = result['stdout']
+        elif isinstance(result, dict) and 'parsed_data' in result:
+            result_text = str(result['parsed_data'])
+        else:
+            result_text = str(result)
+            
+        print(f"Result excerpt: {result_text[:100]}...")
         return True
     except Exception as e:
         print(f"{Fore.RED}Error: {e}{Style.RESET_ALL}")
