@@ -337,7 +337,10 @@ def handle_command(command: str, cache: Dict[str, Any]) -> Tuple[bool, bool]:
                 # Use v3 tool registry for proper execution
                 registry = get_tool_registry()
                 result = registry.execute_tool(tool_name, {}, mode="manual")
-                # Tool result suppressed for clean output
+                
+                # Display the result for manual tool calls
+                if result:
+                    print(f"{ASSISTANT_COLOR}Result: {Style.RESET_ALL}{result}")
 
                 # Update cache with the result
                 cache[tool_name] = result
