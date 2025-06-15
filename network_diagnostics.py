@@ -129,6 +129,93 @@ def get_local_ip() -> str:
 
 
 @standardize_tool_output()
+def get_default_gateway() -> str:
+    """Get the default gateway IP address and interface information"""
+    try:
+        system = platform.system().lower()
+        
+        if system == 'linux':
+            # Use ip route command on Linux
+            result = subprocess.run(['ip', 'route', 'show', 'default'], 
+                                  capture_output=True, text=True, timeout=5)
+            
+            if result.returncode == 0 and result.stdout.strip():
+                # Parse output like: "default via 192.168.1.1 dev eth0 proto dhcp metric 100"
+                lines = result.stdout.strip().split('\n')
+                gateway_info = []
+                
+                for line in lines:
+                    if 'via' in line:
+                        parts = line.split()
+                        gateway_ip = parts[parts.index('via') + 1]
+                        
+                        # Extract interface name
+                        interface = 'unknown'
+                        if 'dev' in parts:
+                            interface = parts[parts.index('dev') + 1]
+                        
+                        # Extract metric if present
+                        metric = 'unknown'
+                        if 'metric' in parts:
+                            metric = parts[parts.index('metric') + 1]
+                        
+                        # Extract protocol if present
+                        proto = 'unknown'
+                        if 'proto' in parts:
+                            proto = parts[parts.index('proto') + 1]
+                        
+                        gateway_info.append(f"Gateway: {gateway_ip}, Interface: {interface}, Protocol: {proto}, Metric: {metric}")
+                
+                return '\n'.join(gateway_info) if gateway_info else "No default gateway found"
+            
+            # Fallback to route command for Linux
+            result = subprocess.run(['route', '-n'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                lines = result.stdout.strip().split('\n')
+                for line in lines:
+                    if line.startswith('0.0.0.0') or 'default' in line.lower():
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            return f"Gateway: {parts[1]} (via route command)"
+                            
+        elif system == 'darwin':  # macOS
+            # Use netstat on macOS (ip command not available by default)
+            result = subprocess.run(['netstat', '-rn'], capture_output=True, text=True, timeout=5)
+            
+            if result.returncode == 0:
+                lines = result.stdout.split('\n')
+                for line in lines:
+                    if line.startswith('default') or line.startswith('0.0.0.0'):
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            gateway_ip = parts[1]
+                            interface = parts[-1] if len(parts) > 5 else 'unknown'
+                            return f"Gateway: {gateway_ip}, Interface: {interface} (macOS netstat)"
+        
+        elif system == 'windows':
+            # Use route print command on Windows
+            result = subprocess.run(['route', 'print', '0.0.0.0'], 
+                                  capture_output=True, text=True, timeout=5)
+            
+            if result.returncode == 0:
+                lines = result.stdout.split('\n')
+                for line in lines:
+                    if '0.0.0.0' in line and 'Gateway' not in line:
+                        parts = line.split()
+                        if len(parts) >= 3:
+                            return f"Gateway: {parts[2]} (Windows route)"
+        
+        return "Could not determine default gateway"
+        
+    except subprocess.TimeoutExpired:
+        return "Timeout while getting gateway information"
+    except FileNotFoundError:
+        return "Network commands not available on this system"
+    except Exception as e:
+        return f"Error getting default gateway: {str(e)}"
+
+
+@standardize_tool_output()
 def get_external_ip() -> str:
     """Get the external/public IP address"""
     # Use the migrated check_external_ip module
@@ -137,6 +224,215 @@ def get_external_ip() -> str:
     except Exception as e:
         print(f"{Fore.YELLOW}Error using migrated external IP check: {e}{Style.RESET_ALL}")
         return "Could not determine external IP (offline or no connectivity)"
+
+
+@standardize_tool_output()
+def get_interface_config() -> str:
+    """Get network interface configuration including DHCP vs static detection"""
+    try:
+        system = platform.system().lower()
+        interface_info = []
+        
+        if system == 'linux':
+            # Get interface information using ip command (Linux)
+            result = subprocess.run(['ip', 'addr', 'show'], 
+                                  capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0:
+                # Parse ip addr output
+                interfaces = {}
+                current_interface = None
+                
+                for line in result.stdout.split('\n'):
+                    line = line.strip()
+                    if line and not line.startswith(' '):
+                        # New interface line
+                        parts = line.split(':')
+                        if len(parts) >= 2:
+                            current_interface = parts[1].strip()
+                            interfaces[current_interface] = {
+                                'name': current_interface,
+                                'addresses': [],
+                                'status': 'DOWN'
+                            }
+                            if 'UP' in line:
+                                interfaces[current_interface]['status'] = 'UP'
+                    elif line.startswith('inet ') and current_interface:
+                        # IPv4 address line
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            addr = parts[1]
+                            interfaces[current_interface]['addresses'].append(addr)
+                
+                # Check for DHCP vs static configuration
+                for iface_name, iface_data in interfaces.items():
+                    if iface_data['status'] == 'UP' and iface_data['addresses']:
+                        # Check DHCP lease files
+                        dhcp_status = check_dhcp_status(iface_name)
+                        
+                        iface_info = f"Interface: {iface_name}\n"
+                        iface_info += f"  Status: {iface_data['status']}\n"
+                        iface_info += f"  Addresses: {', '.join(iface_data['addresses'])}\n"
+                        iface_info += f"  Configuration: {dhcp_status}\n"
+                        
+                        interface_info.append(iface_info)
+        
+        elif system == 'darwin':  # macOS
+            # Use ifconfig on macOS
+            result = subprocess.run(['ifconfig'], capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0:
+                # Parse ifconfig output
+                current_interface = None
+                for line in result.stdout.split('\n'):
+                    line = line.strip()
+                    if line and not line.startswith('\t') and ':' in line:
+                        # New interface line like "en0: flags=..."
+                        interface_name = line.split(':')[0]
+                        current_interface = interface_name
+                        status = 'UP' if 'UP' in line else 'DOWN'
+                        
+                        iface_info = f"Interface: {interface_name}\n"
+                        iface_info += f"  Status: {status}\n"
+                        
+                        interface_info.append(iface_info)
+                    elif line.startswith('inet ') and current_interface:
+                        # IPv4 address line
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            addr = parts[1]
+                            # Update the last interface info with the address
+                            if interface_info:
+                                interface_info[-1] += f"  Address: {addr}\n"
+                
+                # Try to determine DHCP vs static for macOS interfaces
+                for i, info in enumerate(interface_info):
+                    if 'en0' in info or 'en1' in info:  # Common WiFi/Ethernet interfaces
+                        dhcp_status = check_dhcp_status_macos()
+                        interface_info[i] += f"  Configuration: {dhcp_status}\n"
+        
+        elif system == 'windows':
+            # Use ipconfig /all on Windows
+            result = subprocess.run(['ipconfig', '/all'], 
+                                  capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0:
+                # Parse ipconfig output
+                lines = result.stdout.split('\n')
+                current_adapter = None
+                
+                for line in lines:
+                    line = line.strip()
+                    if 'adapter' in line.lower() and ':' in line:
+                        current_adapter = line
+                        interface_info.append(f"\n{current_adapter}")
+                    elif 'DHCP Enabled' in line:
+                        dhcp_enabled = 'Yes' if 'Yes' in line else 'No'
+                        interface_info.append(f"  DHCP: {dhcp_enabled}")
+                    elif 'IPv4 Address' in line:
+                        addr = line.split(':')[-1].strip()
+                        interface_info.append(f"  IPv4: {addr}")
+        
+        return '\n'.join(interface_info) if interface_info else "No network interface information available"
+        
+    except subprocess.TimeoutExpired:
+        return "Timeout while getting interface configuration"
+    except FileNotFoundError:
+        return "Network configuration commands not available"
+    except Exception as e:
+        return f"Error getting interface configuration: {str(e)}"
+
+
+def check_dhcp_status_macos() -> str:
+    """Check DHCP status on macOS using system configuration"""
+    try:
+        # Try to use networksetup to check if DHCP is enabled
+        result = subprocess.run(['networksetup', '-getinfo', 'Wi-Fi'], 
+                              capture_output=True, text=True, timeout=5)
+        
+        if result.returncode == 0:
+            if 'DHCP' in result.stdout:
+                return "DHCP (macOS Wi-Fi)"
+            elif 'Manually' in result.stdout:
+                return "Static (macOS Wi-Fi)"
+        
+        # Try Ethernet if Wi-Fi fails
+        result = subprocess.run(['networksetup', '-getinfo', 'Ethernet'], 
+                              capture_output=True, text=True, timeout=5)
+        
+        if result.returncode == 0:
+            if 'DHCP' in result.stdout:
+                return "DHCP (macOS Ethernet)"
+            elif 'Manually' in result.stdout:
+                return "Static (macOS Ethernet)"
+        
+        return "Unknown (macOS configuration method)"
+    except Exception as e:
+        return f"Unknown (macOS error: {str(e)})"
+
+
+def check_dhcp_status(interface_name: str) -> str:
+    """Check if an interface is using DHCP or static configuration"""
+    try:
+        system = platform.system().lower()
+        
+        if system == 'linux':
+            # Check common DHCP lease file locations
+            dhcp_lease_files = [
+                f'/var/lib/dhcp/dhclient.{interface_name}.leases',
+                f'/var/lib/dhclient/dhclient.{interface_name}.leases',
+                '/var/lib/dhcp/dhclient.leases',
+                '/var/lib/dhclient/dhclient.leases'
+            ]
+            
+            for lease_file in dhcp_lease_files:
+                if os.path.exists(lease_file):
+                    with open(lease_file, 'r') as f:
+                        content = f.read()
+                        if interface_name in content or 'lease' in content:
+                            return "DHCP (lease file found)"
+            
+            # Check NetworkManager if available
+            try:
+                result = subprocess.run(['nmcli', 'connection', 'show'], 
+                                      capture_output=True, text=True, timeout=5)
+                if result.returncode == 0 and 'dhcp' in result.stdout.lower():
+                    return "DHCP (NetworkManager)"
+            except FileNotFoundError:
+                pass
+            
+            # Check systemd-networkd
+            networkd_files = [
+                f'/etc/systemd/network/{interface_name}.network',
+                f'/run/systemd/network/{interface_name}.network'
+            ]
+            
+            for net_file in networkd_files:
+                if os.path.exists(net_file):
+                    with open(net_file, 'r') as f:
+                        content = f.read()
+                        if 'DHCP=yes' in content or 'DHCP=true' in content:
+                            return "DHCP (systemd-networkd)"
+                        elif 'Address=' in content:
+                            return "Static (systemd-networkd)"
+        
+        elif system == 'darwin':  # macOS
+            # Check macOS network configuration
+            try:
+                result = subprocess.run(['networksetup', '-getinfo', f'"{interface_name}"'], 
+                                      capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    if 'DHCP' in result.stdout:
+                        return "DHCP (macOS networksetup)"
+                    elif 'Manually' in result.stdout:
+                        return "Static (macOS networksetup)"
+            except FileNotFoundError:
+                pass
+        
+        return "Unknown (unable to determine)"
+    
+    except Exception as e:
+        return f"Unknown (error: {str(e)})"
 
 
 @standardize_tool_output()
@@ -176,6 +472,144 @@ def check_dns_resolvers() -> str:
                 results.append(f"{name} ({ip}): Unreachable")
 
         return "\n".join(results)
+
+
+@standardize_tool_output()
+def get_network_routes() -> str:
+    """Get complete routing table information"""
+    try:
+        system = platform.system().lower()
+        route_info = []
+        
+        if system == 'linux':
+            # Get full routing table using ip command (Linux)
+            result = subprocess.run(['ip', 'route', 'show'], 
+                                  capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0:
+                lines = result.stdout.strip().split('\n')
+                route_info.append("=== IP Routing Table ===")
+                
+                for line in lines:
+                    if line.strip():
+                        # Parse route information
+                        parts = line.split()
+                        if len(parts) >= 1:
+                            destination = parts[0]
+                            
+                            # Extract gateway if present
+                            gateway = "direct"
+                            if 'via' in parts:
+                                try:
+                                    gateway = parts[parts.index('via') + 1]
+                                except IndexError:
+                                    pass
+                            
+                            # Extract interface if present
+                            interface = "unknown"
+                            if 'dev' in parts:
+                                try:
+                                    interface = parts[parts.index('dev') + 1]
+                                except IndexError:
+                                    pass
+                            
+                            # Extract metric if present
+                            metric = "0"
+                            if 'metric' in parts:
+                                try:
+                                    metric = parts[parts.index('metric') + 1]
+                                except IndexError:
+                                    pass
+                            
+                            # Extract protocol if present
+                            proto = "unknown"
+                            if 'proto' in parts:
+                                try:
+                                    proto = parts[parts.index('proto') + 1]
+                                except IndexError:
+                                    pass
+                            
+                            route_entry = f"  {destination:<18} -> {gateway:<15} via {interface:<8} (metric: {metric}, proto: {proto})"
+                            route_info.append(route_entry)
+            
+            # Also get IPv6 routes if available
+            try:
+                result_v6 = subprocess.run(['ip', '-6', 'route', 'show'], 
+                                         capture_output=True, text=True, timeout=5)
+                if result_v6.returncode == 0 and result_v6.stdout.strip():
+                    route_info.append("\n=== IPv6 Routing Table ===")
+                    lines_v6 = result_v6.stdout.strip().split('\n')
+                    for line in lines_v6[:10]:  # Limit to first 10 IPv6 routes
+                        if line.strip():
+                            route_info.append(f"  {line}")
+            except Exception:
+                pass  # IPv6 routes are optional
+                
+        elif system == 'darwin':  # macOS
+            # Use netstat for routing table on macOS
+            result = subprocess.run(['netstat', '-rn'], capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0:
+                lines = result.stdout.split('\n')
+                route_info.append("=== macOS Routing Table ===")
+                
+                in_ipv4_section = False
+                for line in lines:
+                    if 'Routing tables' in line or 'Internet:' in line:
+                        in_ipv4_section = True
+                        continue
+                    elif 'Internet6:' in line:
+                        in_ipv4_section = False
+                        continue
+                    
+                    if in_ipv4_section and line.strip():
+                        # Look for route entries
+                        if any(char.isdigit() for char in line) and ('.' in line or 'default' in line):
+                            parts = line.split()
+                            if len(parts) >= 2:
+                                destination = parts[0]
+                                gateway = parts[1] if len(parts) > 1 else 'direct'
+                                interface = parts[-1] if len(parts) > 2 else 'unknown'
+                                
+                                route_entry = f"  {destination:<18} -> {gateway:<15} via {interface}"
+                                route_info.append(route_entry)
+        
+        elif system == 'windows':
+            # Use route print on Windows
+            result = subprocess.run(['route', 'print'], 
+                                  capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0:
+                lines = result.stdout.split('\n')
+                route_info.append("=== Windows Routing Table ===")
+                
+                in_ipv4_section = False
+                for line in lines:
+                    if 'IPv4 Route Table' in line:
+                        in_ipv4_section = True
+                        continue
+                    elif 'IPv6 Route Table' in line:
+                        in_ipv4_section = False
+                        continue
+                    
+                    if in_ipv4_section and line.strip():
+                        # Look for route entries (contain IP addresses)
+                        if any(char.isdigit() for char in line) and '.' in line:
+                            route_info.append(f"  {line.strip()}")
+        
+        # Add summary information
+        if route_info:
+            route_count = len([line for line in route_info if line.startswith('  ') and not line.startswith('  ===')])
+            route_info.insert(1, f"Total routes: {route_count}\n")
+        
+        return '\n'.join(route_info) if route_info else "No routing information available"
+        
+    except subprocess.TimeoutExpired:
+        return "Timeout while getting routing information"
+    except FileNotFoundError:
+        return "Routing commands not available on this system"
+    except Exception as e:
+        return f"Error getting routing information: {str(e)}"
 
 
 @standardize_tool_output()
@@ -708,6 +1142,9 @@ def get_available_tools() -> Dict[str, Callable]:
         "get_os_info": get_os_info,
         "get_local_ip": get_local_ip,
         "get_external_ip": get_external_ip,
+        "get_default_gateway": get_default_gateway,
+        "get_interface_config": get_interface_config,
+        "get_network_routes": get_network_routes,
         "check_internet_connection": check_internet_connection,
         "check_dns_resolvers": check_dns_resolvers,
         "ping_target": ping_target,
@@ -938,6 +1375,33 @@ def get_module_tools():
             category=ToolCategory.WEB,
             parameters={},
             examples=["check_whois_servers"]
+        ),
+        "get_default_gateway": ToolMetadata(
+            name="get_default_gateway",
+            function_name="get_default_gateway",
+            module_path="network_diagnostics",
+            description="Get the default gateway IP address and interface information",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={},
+            examples=["get_default_gateway"]
+        ),
+        "get_interface_config": ToolMetadata(
+            name="get_interface_config",
+            function_name="get_interface_config",
+            module_path="network_diagnostics",
+            description="Get network interface configuration including DHCP vs static detection",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={},
+            examples=["get_interface_config"]
+        ),
+        "get_network_routes": ToolMetadata(
+            name="get_network_routes",
+            function_name="get_network_routes",
+            module_path="network_diagnostics",
+            description="Get complete routing table information",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={},
+            examples=["get_network_routes"]
         )
     }
 

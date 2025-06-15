@@ -18,6 +18,7 @@ Options:
 
 import sys
 import os
+import json
 import argparse
 from typing import Dict, Any
 from colorama import init, Fore, Style
@@ -52,30 +53,18 @@ def start_chatbot_mode(model_name=None):
 def run_manual_mode(tool_name=None):
     """Run specific tools manually with v3 architecture"""
     try:
+        # Import the tools registry
+        from core.tools_registry import get_tool_registry
+        registry = get_tool_registry()
+        
         # Quick startup check for tools
         from core.startup_checks import check_tool_inventory
         tool_inventory = check_tool_inventory(silent=True)
-        
-        # Get v3 tools registry
-        tools = _get_v3_tools_registry()
 
         if tool_name is None:
-            # List available tools by category
+            # List available tools using the registry
             print(f"{Fore.CYAN}Instability v3 - Available Tools:{Style.RESET_ALL}")
-            
-            categories = {
-                "Network Diagnostics": ["ping", "dns_check", "web_check", "network_scan"],
-                "Pentesting": ["nmap_scan", "port_scan", "host_discovery"],
-                "System Info": ["system_info", "interface_status", "tool_inventory"]
-            }
-            
-            for category, category_tools in categories.items():
-                print(f"\n{Fore.YELLOW}{category}:{Style.RESET_ALL}")
-                for tool in category_tools:
-                    if tool in tools:
-                        status = f"[{Fore.GREEN}OK{Style.RESET_ALL}]" if _is_tool_available(tool, tool_inventory) else f"[{Fore.YELLOW}WARN{Style.RESET_ALL}]"
-                        desc = tools[tool].get("description", "No description")
-                        print(f"  {status} {Fore.GREEN}{tool}{Style.RESET_ALL}: {desc}")
+            print(registry.list_tools(mode="manual"))
             
             print(f"\nUsage:")
             print(f"  {Fore.CYAN}python instability.py manual all{Style.RESET_ALL} - Run comprehensive diagnostics")
@@ -85,13 +74,31 @@ def run_manual_mode(tool_name=None):
             # Run comprehensive diagnostics
             _run_comprehensive_diagnostics()
             
-        elif tool_name in tools:
-            # Run specific tool
-            _execute_v3_tool(tool_name, tools[tool_name])
-            
         else:
-            print(f"{Fore.RED}Tool '{tool_name}' not found.{Style.RESET_ALL}")
-            print(f"Available tools: {', '.join(tools.keys())}")
+            # Check if tool exists in registry
+            tool_metadata = registry.get_tool(tool_name)
+            if tool_metadata:
+                # Execute tool using registry
+                print(f"{Fore.GREEN}Running {tool_name}...{Style.RESET_ALL}")
+                result = registry.execute_tool(tool_name, {}, mode="manual")
+                
+                # Display the result
+                if result:
+                    if isinstance(result, dict):
+                        if result.get('success'):
+                            print(f"{Fore.GREEN}Success!{Style.RESET_ALL}")
+                            if 'stdout' in result:
+                                print(result['stdout'])
+                            elif 'parsed_data' in result:
+                                print(json.dumps(result['parsed_data'], indent=2))
+                        else:
+                            print(f"{Fore.RED}Error: {result.get('error_message', 'Unknown error')}{Style.RESET_ALL}")
+                    else:
+                        print(result)
+            else:
+                print(f"{Fore.RED}Tool '{tool_name}' not found.{Style.RESET_ALL}")
+                available_tools = registry.get_available_tools(mode="manual")
+                print(f"Available tools: {', '.join(available_tools.keys())}")
             
     except ImportError as e:
         print(f"{Fore.RED}Error: Required v3 module not found: {e}{Style.RESET_ALL}")
