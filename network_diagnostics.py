@@ -862,6 +862,116 @@ def calculate_network(ip: str, netmask: str) -> str:
 
 
 @standardize_tool_output()
+def get_external_ip_netmask(ip: str = None) -> str:
+    """Get the netmask/network range of an external IP address using WHOIS data
+    
+    Args:
+        ip: External IP address to lookup (uses current external IP if not provided)
+    
+    Returns:
+        String containing network range information
+    """
+    try:
+        # If no IP provided, get our external IP
+        if ip is None:
+            if ORIGINAL_TOOLS_AVAILABLE:
+                try:
+                    # Use the migrated tool from network_tools
+                    from network_tools import get_public_ip
+                    ip = get_public_ip()
+                except Exception:
+                    return "Error: Unable to determine external IP address"
+            else:
+                return "Error: External IP lookup not available"
+        
+        # Use whois to get network information
+        try:
+            # First try using whois command if available
+            result = subprocess.run(['whois', ip], capture_output=True, text=True, timeout=15)
+            
+            if result.returncode == 0:
+                whois_output = result.stdout.lower()
+                
+                # Look for common network range patterns
+                network_patterns = [
+                    r'netrange:\s*([0-9.]+)\s*-\s*([0-9.]+)',
+                    r'inetnum:\s*([0-9.]+)\s*-\s*([0-9.]+)',
+                    r'cidr:\s*([0-9./]+)',
+                    r'network:\s*([0-9./]+)',
+                    r'route:\s*([0-9./]+)'
+                ]
+                
+                import re
+                network_info = []
+                
+                for pattern in network_patterns:
+                    matches = re.findall(pattern, whois_output)
+                    if matches:
+                        for match in matches:
+                            if isinstance(match, tuple):
+                                # Range format (start - end)
+                                network_info.append(f"Range: {match[0]} - {match[1]}")
+                            else:
+                                # CIDR format
+                                network_info.append(f"Network: {match}")
+                
+                # Look for netname/organization
+                org_patterns = [
+                    r'netname:\s*([^\n\r]+)',
+                    r'orgname:\s*([^\n\r]+)',
+                    r'org-name:\s*([^\n\r]+)',
+                    r'organisation:\s*([^\n\r]+)'
+                ]
+                
+                org_info = []
+                for pattern in org_patterns:
+                    matches = re.findall(pattern, whois_output)
+                    if matches:
+                        org_info.extend([match.strip() for match in matches[:2]])  # Limit to first 2
+                
+                # Format result
+                result_lines = [f"IP: {ip}"]
+                
+                if org_info:
+                    result_lines.append(f"Organization: {org_info[0]}")
+                
+                if network_info:
+                    result_lines.extend(network_info[:3])  # Limit to first 3 network entries
+                else:
+                    result_lines.append("Network range: Not found in WHOIS data")
+                
+                return "\n".join(result_lines)
+            
+        except subprocess.TimeoutExpired:
+            return f"Error: WHOIS lookup for {ip} timed out"
+        except FileNotFoundError:
+            pass  # whois command not available, try alternative
+        
+        # Fallback: try to extract network info using simple IP analysis
+        try:
+            ip_parts = [int(x) for x in ip.split('.')]
+            
+            # Determine class and typical netmask
+            if ip_parts[0] < 128:
+                # Class A (typically /8 but ISPs use smaller blocks)
+                typical_mask = "/16 to /24"
+            elif ip_parts[0] < 192:
+                # Class B (typically /16 but ISPs use smaller blocks)  
+                typical_mask = "/20 to /24"
+            else:
+                # Class C (typically /24)
+                typical_mask = "/24 to /28"
+            
+            return f"IP: {ip}\nEstimated ISP block size: {typical_mask}\nNote: Use WHOIS for exact network range"
+            
+        except Exception:
+            return f"Error: Unable to analyze IP address {ip}"
+            
+    except Exception as e:
+        return f"Error looking up network information for {ip}: {str(e)}"
+
+
+@standardize_tool_output()
 def ping_target(host: str = None, target: str = None, arg_name: str = None, count: int = 4) -> str:
     """Ping a target host and measure response time
     
@@ -1396,6 +1506,7 @@ def get_available_tools() -> Dict[str, Callable]:
         "get_network_routes": get_network_routes,
         "get_dns_config": get_dns_config,
         "get_network_config": get_network_config,
+        "get_external_ip_netmask": get_external_ip_netmask,
         "check_internet_connection": check_internet_connection,
         "check_dns_resolvers": check_dns_resolvers,
         "ping_target": ping_target,
@@ -1671,6 +1782,18 @@ def get_module_tools():
             category=ToolCategory.NETWORK_DIAGNOSTICS,
             parameters={},
             examples=["get_network_config"]
+        ),
+        "get_external_ip_netmask": ToolMetadata(
+            name="get_external_ip_netmask",
+            function_name="get_external_ip_netmask",
+            module_path="network_diagnostics",
+            description="Get the netmask/network range of an external IP address using WHOIS data",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={
+                "ip": ParameterInfo(ParameterType.STRING, required=False,
+                                  description="External IP address to lookup (uses current external IP if not provided)")
+            },
+            examples=["get_external_ip_netmask", "get_external_ip_netmask 8.8.8.8"]
         )
     }
 
