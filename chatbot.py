@@ -340,7 +340,20 @@ def handle_command(command: str, cache: Dict[str, Any]) -> Tuple[bool, bool]:
                 
                 # Display the result for manual tool calls
                 if result:
-                    print(f"{ASSISTANT_COLOR}Result: {Style.RESET_ALL}{result}")
+                    print(f"{ASSISTANT_COLOR}Result: {Style.RESET_ALL}")
+                    
+                    # Format JSON results nicely with Rich if available
+                    if RICH_AVAILABLE and isinstance(result, dict):
+                        from rich.json import JSON
+                        json_obj = JSON.from_data(result)
+                        console.print(json_obj)
+                    else:
+                        # Fallback to regular print
+                        if isinstance(result, dict):
+                            import json
+                            print(json.dumps(result, indent=2))
+                        else:
+                            print(result)
 
                 # Update cache with the result
                 cache[tool_name] = result
