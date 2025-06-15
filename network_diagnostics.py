@@ -613,6 +613,255 @@ def get_network_routes() -> str:
 
 
 @standardize_tool_output()
+def get_dns_config() -> str:
+    """Get the actual DNS servers configured on this system"""
+    try:
+        system = platform.system().lower()
+        dns_info = []
+        
+        if system in ['linux', 'darwin']:  # Linux or macOS
+            # Check /etc/resolv.conf first
+            try:
+                with open('/etc/resolv.conf', 'r') as f:
+                    resolv_content = f.read()
+                    
+                dns_servers = []
+                for line in resolv_content.split('\n'):
+                    line = line.strip()
+                    if line.startswith('nameserver'):
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            dns_servers.append(parts[1])
+                
+                if dns_servers:
+                    dns_info.append("=== DNS Configuration ===")
+                    dns_info.append("Source: /etc/resolv.conf")
+                    for i, server in enumerate(dns_servers, 1):
+                        dns_info.append(f"  DNS Server {i}: {server}")
+                else:
+                    dns_info.append("No nameservers found in /etc/resolv.conf")
+                    
+            except FileNotFoundError:
+                dns_info.append("Warning: /etc/resolv.conf not found")
+            except PermissionError:
+                dns_info.append("Warning: Cannot read /etc/resolv.conf (permission denied)")
+            
+            # On macOS, also check scutil for more detailed info
+            if system == 'darwin':
+                try:
+                    result = subprocess.run(['scutil', '--dns'], 
+                                          capture_output=True, text=True, timeout=10)
+                    
+                    if result.returncode == 0:
+                        dns_info.append("\n=== macOS DNS Configuration (scutil) ===")
+                        lines = result.stdout.split('\n')
+                        current_resolver = None
+                        
+                        for line in lines:
+                            line = line.strip()
+                            if 'resolver #' in line:
+                                current_resolver = line
+                                dns_info.append(f"\n{current_resolver}")
+                            elif 'nameserver[' in line and current_resolver:
+                                dns_info.append(f"  {line}")
+                            elif 'domain' in line and current_resolver and ': ' in line:
+                                dns_info.append(f"  {line}")
+                                
+                except FileNotFoundError:
+                    dns_info.append("Note: scutil command not available")
+                except Exception as e:
+                    dns_info.append(f"Note: scutil error: {str(e)}")
+        
+        elif system == 'windows':
+            # Use ipconfig /all on Windows
+            try:
+                result = subprocess.run(['ipconfig', '/all'], 
+                                      capture_output=True, text=True, timeout=10)
+                
+                if result.returncode == 0:
+                    dns_info.append("=== Windows DNS Configuration ===")
+                    lines = result.stdout.split('\n')
+                    current_adapter = None
+                    
+                    for line in lines:
+                        line = line.strip()
+                        if 'adapter' in line.lower() and ':' in line:
+                            current_adapter = line
+                            dns_info.append(f"\n{current_adapter}")
+                        elif 'DNS Servers' in line and current_adapter:
+                            dns_server = line.split(':')[-1].strip()
+                            if dns_server:
+                                dns_info.append(f"  Primary DNS: {dns_server}")
+                        elif line and current_adapter and '.' in line and any(c.isdigit() for c in line):
+                            # Additional DNS servers (usually indented)
+                            if not any(skip in line.lower() for skip in ['adapter', 'description', 'physical']):
+                                dns_info.append(f"  Secondary DNS: {line}")
+                                
+            except FileNotFoundError:
+                dns_info.append("Error: ipconfig command not available")
+            except Exception as e:
+                dns_info.append(f"Error running ipconfig: {str(e)}")
+        
+        return '\n'.join(dns_info) if dns_info else "No DNS configuration information available"
+        
+    except Exception as e:
+        return f"Error getting DNS configuration: {str(e)}"
+
+
+@standardize_tool_output()
+def get_network_config() -> str:
+    """Get network configuration including IP addresses, netmasks, and subnet information"""
+    try:
+        system = platform.system().lower()
+        network_info = []
+        
+        if system == 'linux':
+            # Use ip addr show for detailed interface info
+            result = subprocess.run(['ip', 'addr', 'show'], 
+                                  capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0:
+                network_info.append("=== Network Interface Configuration ===")
+                current_interface = None
+                
+                for line in result.stdout.split('\n'):
+                    line = line.strip()
+                    if line and not line.startswith(' '):
+                        # New interface line
+                        parts = line.split(':')
+                        if len(parts) >= 2:
+                            current_interface = parts[1].strip()
+                            status = 'UP' if 'UP' in line else 'DOWN'
+                            network_info.append(f"\nInterface: {current_interface} ({status})")
+                    elif line.startswith('inet ') and current_interface:
+                        # IPv4 address line with CIDR notation
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            addr_cidr = parts[1]  # e.g., "192.168.1.100/24"
+                            if '/' in addr_cidr:
+                                ip, prefix = addr_cidr.split('/')
+                                # Convert CIDR to netmask
+                                netmask = cidr_to_netmask(int(prefix))
+                                network_info.append(f"  IP Address: {ip}")
+                                network_info.append(f"  Netmask: {netmask} (/{prefix})")
+                                network_info.append(f"  Network: {calculate_network(ip, netmask)}")
+                            else:
+                                network_info.append(f"  IP Address: {addr_cidr}")
+                                
+        elif system == 'darwin':  # macOS
+            # Use ifconfig for detailed interface info
+            result = subprocess.run(['ifconfig'], capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0:
+                network_info.append("=== Network Interface Configuration ===")
+                current_interface = None
+                
+                for line in result.stdout.split('\n'):
+                    original_line = line
+                    line = line.strip()
+                    
+                    # Interface header: starts at beginning of line, contains colon
+                    if line and not original_line.startswith('\t') and not original_line.startswith(' ') and ':' in line:
+                        # New interface line
+                        interface_name = line.split(':')[0]
+                        current_interface = interface_name
+                        status = 'UP' if 'UP' in line else 'DOWN'
+                        network_info.append(f"\nInterface: {interface_name} ({status})")
+                    
+                    # IPv4 address: usually indented, starts with 'inet '
+                    elif 'inet ' in line and current_interface and 'inet6' not in line:
+                        # IPv4 address line: inet 192.168.1.244 netmask 0xffffff00 broadcast 192.168.1.255
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            ip = parts[1]
+                            netmask_hex = None
+                            
+                            # Find netmask in the line
+                            try:
+                                netmask_idx = parts.index('netmask')
+                                if netmask_idx + 1 < len(parts):
+                                    netmask_hex = parts[netmask_idx + 1]
+                            except ValueError:
+                                pass
+                            
+                            # Convert hex netmask to decimal
+                            if netmask_hex and netmask_hex.startswith('0x'):
+                                try:
+                                    netmask = hex_to_netmask(netmask_hex)
+                                    network_info.append(f"  IP Address: {ip}")
+                                    network_info.append(f"  Netmask: {netmask}")
+                                    network_info.append(f"  Network: {calculate_network(ip, netmask)}")
+                                except:
+                                    network_info.append(f"  IP Address: {ip}")
+                                    network_info.append(f"  Netmask: {netmask_hex} (hex)")
+                            else:
+                                network_info.append(f"  IP Address: {ip}")
+                                
+        elif system == 'windows':
+            # Use ipconfig for Windows
+            result = subprocess.run(['ipconfig'], capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0:
+                network_info.append("=== Network Interface Configuration ===")
+                current_adapter = None
+                
+                for line in result.stdout.split('\n'):
+                    line = line.strip()
+                    if 'adapter' in line.lower() and ':' in line:
+                        current_adapter = line
+                        network_info.append(f"\n{current_adapter}")
+                    elif 'IPv4 Address' in line and current_adapter:
+                        ip = line.split(':')[-1].strip()
+                        network_info.append(f"  IP Address: {ip}")
+                    elif 'Subnet Mask' in line and current_adapter:
+                        netmask = line.split(':')[-1].strip()
+                        network_info.append(f"  Netmask: {netmask}")
+        
+        return '\n'.join(network_info) if network_info else "No network configuration information available"
+        
+    except subprocess.TimeoutExpired:
+        return "Timeout while getting network configuration"
+    except FileNotFoundError:
+        return "Network configuration commands not available"
+    except Exception as e:
+        return f"Error getting network configuration: {str(e)}"
+
+
+def cidr_to_netmask(prefix_length: int) -> str:
+    """Convert CIDR prefix length to dotted decimal netmask"""
+    try:
+        # Create a 32-bit mask with prefix_length bits set to 1
+        mask = (0xffffffff >> (32 - prefix_length)) << (32 - prefix_length)
+        # Convert to dotted decimal
+        return f"{(mask >> 24) & 0xff}.{(mask >> 16) & 0xff}.{(mask >> 8) & 0xff}.{mask & 0xff}"
+    except:
+        return f"/{prefix_length}"
+
+
+def hex_to_netmask(hex_mask: str) -> str:
+    """Convert hexadecimal netmask to dotted decimal"""
+    try:
+        # Remove 0x prefix and convert to integer
+        mask_int = int(hex_mask, 16)
+        # Convert to dotted decimal
+        return f"{(mask_int >> 24) & 0xff}.{(mask_int >> 16) & 0xff}.{(mask_int >> 8) & 0xff}.{mask_int & 0xff}"
+    except:
+        return hex_mask
+
+
+def calculate_network(ip: str, netmask: str) -> str:
+    """Calculate network address from IP and netmask"""
+    try:
+        ip_parts = [int(x) for x in ip.split('.')]
+        mask_parts = [int(x) for x in netmask.split('.')]
+        
+        network_parts = [ip_parts[i] & mask_parts[i] for i in range(4)]
+        return '.'.join(map(str, network_parts))
+    except:
+        return "Unable to calculate"
+
+
+@standardize_tool_output()
 def ping_target(host: str = None, target: str = None, arg_name: str = None, count: int = 4) -> str:
     """Ping a target host and measure response time
     
@@ -1145,6 +1394,8 @@ def get_available_tools() -> Dict[str, Callable]:
         "get_default_gateway": get_default_gateway,
         "get_interface_config": get_interface_config,
         "get_network_routes": get_network_routes,
+        "get_dns_config": get_dns_config,
+        "get_network_config": get_network_config,
         "check_internet_connection": check_internet_connection,
         "check_dns_resolvers": check_dns_resolvers,
         "ping_target": ping_target,
@@ -1402,6 +1653,24 @@ def get_module_tools():
             category=ToolCategory.NETWORK_DIAGNOSTICS,
             parameters={},
             examples=["get_network_routes"]
+        ),
+        "get_dns_config": ToolMetadata(
+            name="get_dns_config",
+            function_name="get_dns_config",
+            module_path="network_diagnostics",
+            description="Get the actual DNS servers configured on this system",
+            category=ToolCategory.DNS,
+            parameters={},
+            examples=["get_dns_config"]
+        ),
+        "get_network_config": ToolMetadata(
+            name="get_network_config",
+            function_name="get_network_config",
+            module_path="network_diagnostics",
+            description="Get network configuration including IP addresses, netmasks, and subnet information",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={},
+            examples=["get_network_config"]
         )
     }
 
