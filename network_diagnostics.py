@@ -15,6 +15,7 @@ import subprocess
 import platform
 import json
 import time
+import re
 from datetime import datetime
 from typing import Dict, Any, Callable, Optional, List
 from colorama import Fore, Style
@@ -433,6 +434,152 @@ def check_dhcp_status(interface_name: str) -> str:
     
     except Exception as e:
         return f"Unknown (error: {str(e)})"
+
+
+@standardize_tool_output()
+def get_interface_mac_address(interface: str = None) -> str:
+    """Get MAC address of a specific interface or all interfaces
+    
+    Args:
+        interface: Interface name (e.g., 'eth0', 'en0', 'WiFi'). If None, lists all interfaces with MAC addresses.
+    
+    Returns:
+        MAC address or interface list with MAC addresses
+    """
+    try:
+        system = platform.system().lower()
+        
+        if interface:
+            # Get MAC for specific interface
+            mac_address = _get_single_interface_mac(interface, system)
+            if mac_address:
+                return f"Interface {interface}: {mac_address}"
+            else:
+                return f"Interface {interface}: MAC address not found"
+        else:
+            # List all interfaces with MAC addresses
+            interfaces_with_mac = _get_all_interfaces_mac(system)
+            if interfaces_with_mac:
+                result = "Network interfaces with MAC addresses:\n"
+                for iface_name, mac_addr in interfaces_with_mac.items():
+                    result += f"  {iface_name}: {mac_addr}\n"
+                return result.strip()
+            else:
+                return "No network interfaces with MAC addresses found"
+                
+    except Exception as e:
+        return f"Error getting MAC address: {str(e)}"
+
+
+def _get_single_interface_mac(interface: str, system: str) -> str:
+    """Get MAC address for a single interface"""
+    try:
+        if system == 'linux':
+            # Try ip link show first
+            result = subprocess.run(['ip', 'link', 'show', interface], 
+                                  capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                mac_match = re.search(r'link/ether ([0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2})', 
+                                    result.stdout, re.IGNORECASE)
+                if mac_match:
+                    return mac_match.group(1)
+            
+            # Fallback to cat /sys/class/net/{interface}/address
+            result = subprocess.run(['cat', f'/sys/class/net/{interface}/address'], 
+                                  capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                return result.stdout.strip()
+                
+        elif system == 'darwin':  # macOS
+            # Use ifconfig
+            result = subprocess.run(['ifconfig', interface], 
+                                  capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                mac_match = re.search(r'ether ([0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2})', 
+                                    result.stdout, re.IGNORECASE)
+                if mac_match:
+                    return mac_match.group(1)
+        
+        elif system == 'windows':
+            # Use getmac command
+            result = subprocess.run(['getmac', '/fo', 'csv', '/v'], 
+                                  capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                lines = result.stdout.split('\n')
+                for line in lines[1:]:  # Skip header
+                    if interface.lower() in line.lower():
+                        parts = line.split(',')
+                        if len(parts) >= 3:
+                            mac = parts[2].strip('"')
+                            if mac and mac != 'N/A':
+                                return mac
+                                
+    except Exception:
+        pass
+    
+    return None
+
+
+def _get_all_interfaces_mac(system: str) -> Dict[str, str]:
+    """Get MAC addresses for all interfaces"""
+    interfaces = {}
+    
+    try:
+        if system == 'linux':
+            # Use ip link show
+            result = subprocess.run(['ip', 'link', 'show'], 
+                                  capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                current_interface = None
+                for line in result.stdout.split('\n'):
+                    # Interface line: "2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500..."
+                    if re.match(r'^\d+:', line):
+                        parts = line.split(':')
+                        if len(parts) >= 2:
+                            current_interface = parts[1].strip()
+                    # MAC line: "    link/ether 00:1a:2b:3c:4d:ef brd ff:ff:ff:ff:ff:ff"
+                    elif current_interface and 'link/ether' in line:
+                        mac_match = re.search(r'link/ether ([0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2})', 
+                                            line, re.IGNORECASE)
+                        if mac_match:
+                            interfaces[current_interface] = mac_match.group(1)
+                            
+        elif system == 'darwin':  # macOS
+            # Use ifconfig
+            result = subprocess.run(['ifconfig'], 
+                                  capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                current_interface = None
+                for line in result.stdout.split('\n'):
+                    # Interface line: "en0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500"
+                    if not line.startswith('\t') and ':' in line and 'flags=' in line:
+                        current_interface = line.split(':')[0]
+                    # MAC line: "\tether 00:1a:2b:3c:4d:ef"
+                    elif current_interface and line.strip().startswith('ether '):
+                        mac_match = re.search(r'ether ([0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2})', 
+                                            line, re.IGNORECASE)
+                        if mac_match:
+                            interfaces[current_interface] = mac_match.group(1)
+                            
+        elif system == 'windows':
+            # Use getmac command
+            result = subprocess.run(['getmac', '/fo', 'csv', '/v'], 
+                                  capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                lines = result.stdout.split('\n')
+                for line in lines[1:]:  # Skip header
+                    if line.strip():
+                        parts = line.split(',')
+                        if len(parts) >= 3:
+                            name = parts[0].strip('"')
+                            mac = parts[2].strip('"')
+                            if mac and mac != 'N/A':
+                                interfaces[name] = mac
+                                
+    except Exception:
+        pass
+    
+    return interfaces
 
 
 @standardize_tool_output()
@@ -1503,6 +1650,7 @@ def get_available_tools() -> Dict[str, Callable]:
         "get_external_ip": get_external_ip,
         "get_default_gateway": get_default_gateway,
         "get_interface_config": get_interface_config,
+        "get_interface_mac_address": get_interface_mac_address,
         "get_network_routes": get_network_routes,
         "get_dns_config": get_dns_config,
         "get_network_config": get_network_config,
@@ -1794,6 +1942,18 @@ def get_module_tools():
                                   description="External IP address to lookup (uses current external IP if not provided)")
             },
             examples=["get_external_ip_netmask", "get_external_ip_netmask 8.8.8.8"]
+        ),
+        "get_interface_mac_address": ToolMetadata(
+            name="get_interface_mac_address",
+            function_name="get_interface_mac_address",
+            module_path="network_diagnostics",
+            description="Get MAC address of a specific interface or all interfaces",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={
+                "interface": ParameterInfo(ParameterType.STRING, required=False,
+                                         description="Interface name (e.g., 'eth0', 'en0', 'WiFi'). If None, lists all interfaces with MAC addresses.")
+            },
+            examples=["get_interface_mac_address", "get_interface_mac_address eth0", "get_interface_mac_address en0"]
         )
     }
 
