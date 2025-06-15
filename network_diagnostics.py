@@ -37,6 +37,28 @@ except ImportError as e:
     print(f"{Fore.YELLOW}Warning: Pentest tools not available: {e}{Style.RESET_ALL}")
     PENTEST_TOOLS_AVAILABLE = False
 
+# Import v3 layer2 diagnostic tools
+try:
+    from network.layer2_diagnostics import check_interface_status as _check_interface_status, get_system_info as _get_system_info, get_gateway_info as _get_gateway_info
+    LAYER2_TOOLS_AVAILABLE = True
+    
+    # Create module-level functions for direct import
+    def check_interface_status(interface: str = None, silent: bool = False):
+        """Check network interface status and configuration for all interfaces or a specific one."""
+        return _check_interface_status(interface=interface, silent=silent)
+    
+    def get_system_info_v3(silent: bool = False):
+        """Get comprehensive system information including OS details."""
+        return _get_system_info(silent=silent)
+    
+    def get_gateway_info(silent: bool = False):
+        """Get default gateway information including IP and MAC address."""
+        return _get_gateway_info(silent=silent)
+        
+except ImportError as e:
+    print(f"{Fore.YELLOW}Warning: Layer2 diagnostic tools not available: {e}{Style.RESET_ALL}")
+    LAYER2_TOOLS_AVAILABLE = False
+
 # Add parent directory to path to allow importing from original modules
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
@@ -1702,6 +1724,14 @@ def get_available_tools() -> Dict[str, Callable]:
             "comprehensive_scan": comprehensive_scan_wrapper
         })
 
+    # Add v3 layer2 diagnostic tools if available
+    if LAYER2_TOOLS_AVAILABLE:
+        tools.update({
+            "check_interface_status": check_interface_status,
+            "get_system_info_v3": get_system_info_v3,
+            "get_gateway_info": get_gateway_info
+        })
+
     # Add more original tools if available - example of how to add more
     if ORIGINAL_TOOLS_AVAILABLE:
         try:
@@ -1954,6 +1984,45 @@ def get_module_tools():
                                          description="Interface name (e.g., 'eth0', 'en0', 'WiFi'). If None, lists all interfaces with MAC addresses.")
             },
             examples=["get_interface_mac_address", "get_interface_mac_address eth0", "get_interface_mac_address en0"]
+        ),
+        "check_interface_status": ToolMetadata(
+            name="check_interface_status",
+            function_name="check_interface_status",
+            module_path="network_diagnostics",
+            description="Check network interface status and configuration for all interfaces or a specific one. Shows which interfaces are up/down with IP addresses and MAC addresses.",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={
+                "interface": ParameterInfo(ParameterType.STRING, required=False,
+                                         description="Specific interface to check (if None, checks all interfaces)"),
+                "silent": ParameterInfo(ParameterType.BOOLEAN, required=False, default=False,
+                                      description="If True, suppress output except errors")
+            },
+            aliases=["list_interfaces", "show_interfaces", "interface_status"],
+            examples=["check_interface_status", "check_interface_status en0", "check_interface_status interface=eth0"]
+        ),
+        "get_system_info_v3": ToolMetadata(
+            name="get_system_info_v3",
+            function_name="get_system_info_v3",
+            module_path="network_diagnostics",
+            description="Get comprehensive system information including hostname, OS, architecture, and user details",
+            category=ToolCategory.SYSTEM_INFO,
+            parameters={
+                "silent": ParameterInfo(ParameterType.BOOLEAN, required=False, default=False,
+                                      description="If True, suppress output except errors")
+            },
+            examples=["get_system_info_v3"]
+        ),
+        "get_gateway_info": ToolMetadata(
+            name="get_gateway_info",
+            function_name="get_gateway_info",
+            module_path="network_diagnostics",
+            description="Get default gateway information including IP address and MAC address",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={
+                "silent": ParameterInfo(ParameterType.BOOLEAN, required=False, default=False,
+                                      description="If True, suppress output except errors")
+            },
+            examples=["get_gateway_info"]
         )
     }
 
