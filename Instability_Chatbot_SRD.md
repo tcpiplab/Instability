@@ -89,7 +89,7 @@ The Instability Chatbot v3 is a proactive terminal-based network diagnostic and 
 ### 4.1 Ollama Integration
 - Direct use of Ollama Python API
 - Utilization of Ollama's context parameter for conversation tracking
-- Support for different Ollama models with runtime selection (default: phi3:14b)
+- Support for different Ollama models with runtime selection (default: dolphin3)
 
 ### 4.2 Tool Execution Framework
 - Simple function-based tool registry

@@ -2,7 +2,7 @@
 
 <div style="text-align:left"><img width="33%" src="images/instability_ascii_ghost_terminal_v3.0.png" /></div>
 
-An AI network troubleshooter and pentesting chatbot that runs locally via Ollama. Diagnoses network problems, understands your local and target network context, and keeps all analysis private on localhost. No 3rd party cloud services, no data leaks. Uses `phi3:14b` LLM by default but you can specify any Ollama model you have installed. Helpful to orient yourself on an unfamiliar or problematic network, and then to call pentesting tools and analyze their output.
+An AI network troubleshooter and pentesting chatbot that runs locally via Ollama. Diagnoses network problems, understands your local and target network context, and keeps all analysis private on localhost. No 3rd party cloud services, no data leaks. Uses `dolphin3` LLM by default but you can specify any Ollama model you have installed. Helpful to orient yourself on an unfamiliar or problematic network, and then to call pentesting tools and analyze their output.
 
 ## Overview
 
@@ -32,7 +32,7 @@ Instability v3 builds upon v2 with enhanced functionality and improved architect
 
 - Python 3.11 or higher
 - [Ollama](https://ollama.ai/) installed and running locally
-- An Ollama model installed (default: `phi3:14b`, but any compatible model can be used)
+- An Ollama model installed (default: `dolphin3`, but any compatible model can be used)
 
 ### Setting Up
 
@@ -55,10 +55,10 @@ pip install -r requirements.txt
 ollama serve
 ```
 
-4. Make sure the phi3:14b model is available (or any other model you want to use):
+4. Make sure the dolphin3 model is available (or any other model you want to use):
 
 ```bash
-ollama pull phi3:14b
+ollama pull dolphin3
 ```
 
 To use a different model, pull it first and then specify it with the `--model` option:
@@ -86,7 +86,7 @@ python instability.py chatbot -m llama3.2:1b
 python instability.py chatbot --model mistral:7b
 ```
 
-The default model is `phi3:14b` if no model is specified.
+The default model is `dolphin3` if no model is specified.
 
 ### Running Specific Tools Manually
 
@@ -278,7 +278,7 @@ The tool will automatically be discovered and available in both chatbot and manu
 If you encounter issues connecting to Ollama:
 
 1. Ensure Ollama is running with `ollama serve`
-2. Verify your desired model is installed with `ollama list` (default is phi3:14b)
+2. Verify your desired model is installed with `ollama list` (default is dolphin3)
 3. Check for any firewalls blocking localhost connections
 4. If using a custom model, ensure it's correctly spelled and available in Ollama
 
