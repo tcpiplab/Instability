@@ -14,7 +14,7 @@ VERSION = "3.0.0"
 APP_NAME = "Instability"
 
 # Ollama configuration
-OLLAMA_DEFAULT_MODEL = "phi3:14b"
+OLLAMA_DEFAULT_MODEL = "dolphin3"
 OLLAMA_API_URL = "http://localhost:11434"
 OLLAMA_TIMEOUT = 30
 

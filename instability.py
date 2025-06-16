@@ -13,7 +13,7 @@ Usage:
     python instability.py help                    - Show help information
     
 Options:
-    --model, -m MODEL    Specify Ollama model name (default: phi3:14b)
+    --model, -m MODEL    Specify Ollama model name (default: dolphin3)
 """
 
 import sys
@@ -195,7 +195,7 @@ def show_help():
     
     print(f"\n{Fore.YELLOW}Options:{Style.RESET_ALL}")
     print(f"  {Fore.GREEN}--model, -m MODEL{Style.RESET_ALL}")
-    print("      Specify Ollama model (default: phi3:14b)")
+    print("      Specify Ollama model (default: dolphin3)")
     
     print(f"\n{Fore.YELLOW}Available Manual Tools:{Style.RESET_ALL}")
     print(f"  {Fore.GREEN}Network Diagnostics:{Style.RESET_ALL} ping, dns_check, web_check, network_scan")
@@ -357,8 +357,8 @@ def main():
     parser.add_argument('mode', nargs='?', choices=['chatbot', 'manual', 'test', 'run-tests', 'help'],
                         default='help', help='Mode of operation')
     parser.add_argument('tool_name', nargs='?', help='Specific tool to run in manual mode')
-    parser.add_argument('--model', '-m', type=str, default='phi3:14b',
-                        help='Ollama model name to use for chatbot (default: phi3:14b)')
+    parser.add_argument('--model', '-m', type=str, default='dolphin3',
+                        help='Ollama model name to use for chatbot (default: dolphin3)')
     args = parser.parse_args()
 
     # Handle different modes
