@@ -153,6 +153,11 @@ def check_ssl_certificate(hostname: str, port: int = 443, timeout: int = 10, sil
     try:
         # Create SSL context
         context = ssl.create_default_context()
+        # Ensure only secure protocols (TLS 1.2 and above) are used
+        if hasattr(ssl, 'TLSVersion'):  # Python 3.7+
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+        else:  # For older Python versions
+            context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1
         
         # Connect and get certificate
         with socket.create_connection((hostname, port), timeout=timeout) as sock:
