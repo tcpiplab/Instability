@@ -9,3 +9,7 @@ memory/session_cache.json
 /images/instability_ascii_ghost.png
 /images/instability_ascii_ghost_terminal.png
 /images/instability_ascii_ghost_terminal2.png
+/qodana.yaml
+/semgrep_results*.sarif
+/.vscode/
+/.claude/

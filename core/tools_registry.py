@@ -9,6 +9,7 @@ import importlib
 import inspect
 import os
 from dataclasses import dataclass, field
+from types import ModuleType
 from typing import Dict, Any, List, Optional, Callable, Union
 from enum import Enum
 
@@ -81,7 +82,23 @@ class ToolRegistry:
         # Initialize categories
         for category in ToolCategory:
             self._categories[category] = []
-    
+
+    @staticmethod
+    def _is_safe_module_path(module_path: str) -> bool:
+        """Validate if a module path is safe to import.
+        :param module_path:
+        :return:
+        """
+        # Whitelist of allowed module paths/prefixes
+        safe_prefixes = {
+                "network", "pentest", "memory", "core",
+                "network_diagnostics", "pentest.tool_detector"
+                }
+
+        parts = module_path.split('.')
+        return parts[0] in safe_prefixes
+
+
     def register_tool(self, metadata: ToolMetadata) -> None:
         """
         Register a tool with the registry.
@@ -98,7 +115,14 @@ class ToolRegistry:
         
         if not metadata.module_path:
             raise ValueError("Module path is required")
-        
+
+        # Validate module path to prevent unsafe imports such as absolute imports like "os" or "sys" from malicious user input or developer error
+        if self._is_safe_module_path(metadata.module_path):
+            module = importlib.import_module(metadata.module_path)
+            metadata.function_ref = getattr(module, metadata.function_name)
+        else:
+            raise ValueError(f"Unsafe module path: {metadata.module_path}")
+
         # Load function reference if not provided
         if metadata.function_ref is None:
             try:
@@ -131,8 +155,14 @@ class ToolRegistry:
         Returns:
             Dictionary of discovered tools
         """
+
         try:
-            module = importlib.import_module(module_path)
+
+            # Validate module path to prevent unsafe imports such as absolute imports like "os" or "sys" from malicious user input or developer error
+            if self._is_safe_module_path(module_path):
+                module = importlib.import_module(module_path)
+            else:
+                raise ValueError(f"Unsafe module path: {module_path}")
             
             # Look for get_module_tools function
             if hasattr(module, 'get_module_tools'):
@@ -205,7 +235,10 @@ class ToolRegistry:
                     if filename.endswith('.py') and not filename.startswith('_'):
                         module_name = filename[:-3]  # Remove .py
                         module_path = f"{base_path}.{module_name}"
-                        self.discover_module_tools(module_path)
+
+                        # Validate module path to prevent unsafe imports such as absolute imports like "os" or "sys" from malicious user input or developer error
+                        if self._is_safe_module_path(module_path):
+                            self.discover_module_tools(module_path)
                         
             except (ImportError, FileNotFoundError, AttributeError) as e:
                 print(f"Warning: Could not discover tools in {base_path}: {e}")
@@ -213,10 +246,13 @@ class ToolRegistry:
         # Discover additional standalone modules
         for module_path in self._additional_modules:
             try:
-                self.discover_module_tools(module_path)
+                # Validate module path to prevent unsafe imports such as absolute imports like "os" or "sys" from malicious user input or developer error
+                if self._is_safe_module_path(module_path):
+                    self.discover_module_tools(module_path)
             except Exception as e:
                 print(f"Warning: Could not discover tools in {module_path}: {e}")
-    
+
+
     def integrate_external_tools(self) -> None:
         """
         Integrate external tool detection with registry.
@@ -244,10 +280,15 @@ class ToolRegistry:
                     
                     # Try to find wrapper function
                     try:
-                        wrapper_module = importlib.import_module(f"pentest.{tool_name}_wrapper")
-                        if hasattr(wrapper_module, f"run_{tool_name}_scan"):
-                            metadata.function_ref = getattr(wrapper_module, f"run_{tool_name}_scan")
-                            self.register_tool(metadata)
+
+                        # Validate module path to prevent unsafe imports such as absolute imports like "os" or "sys" from malicious user input or developer error
+                        if self._is_safe_module_path(f"pentest.{tool_name}_wrapper"):
+                            wrapper_module: ModuleType = importlib.import_module(f"pentest.{tool_name}_wrapper")
+
+                            if hasattr(wrapper_module, f"run_{tool_name}_scan"):
+                                metadata.function_ref = getattr(wrapper_module, f"run_{tool_name}_scan")
+                                self.register_tool(metadata)
+
                     except ImportError:
                         # Tool detected but no wrapper available
                         pass
