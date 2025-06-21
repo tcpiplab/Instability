@@ -1153,6 +1153,9 @@ def ping_target(host: str = None, target: str = None, arg_name: str = None, coun
     Returns:
         String containing ping results
     """
+
+    destination = None
+
     try:
         # Allow multiple parameter names (precedence: arg_name > target > host)
         if arg_name is not None:
