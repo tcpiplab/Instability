@@ -364,14 +364,18 @@ def main():
     # Handle different modes
     if args.mode == 'chatbot':
         start_chatbot_mode(model_name=args.model)
+        return None
     elif args.mode == 'manual':
         run_manual_mode(args.tool_name)
+        return None
     elif args.mode == 'test':
         run_test_mode()
+        return None
     elif args.mode == 'run-tests':
         return run_tests_mode()
     elif args.mode == 'help':
         show_help()
+        return None
     else:
         # This should not happen due to choices in argparse
         print(f"{Fore.RED}Invalid mode: {args.mode}{Style.RESET_ALL}")
