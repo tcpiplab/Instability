@@ -91,7 +91,7 @@ def check_website(url: str, verify_ssl: bool = False, timeout: int = 10) -> Tupl
 
 
 def check_websites_reachability(
-    websites: List[str] = DEFAULT_WEBSITES,
+    websites = None,
     max_retries: int = 1,
     retry_delay: int = 3,
     timeout: int = 10,
@@ -110,6 +110,11 @@ def check_websites_reachability(
     Returns:
         tuple: (reachable_websites, unreachable_websites) where each is a list of (url, result) tuples
     """
+
+    # Use default websites if none provided
+    if websites is None:
+        websites = DEFAULT_WEBSITES
+
     # Initialize lists to store reachable and unreachable websites
     reachable_websites = []
     unreachable_websites = []
