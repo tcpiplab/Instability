@@ -1479,10 +1479,8 @@ def check_nat_status() -> str:
             return f"Unable to determine NAT status.\nLocal IP: {local_ip}\nExternal IP: {external_ip}"
         
         # Build detailed response
-        result = []
-        result.append(f"Local IP Address: {local_ip}")
-        result.append(f"External IP Address: {external_ip}")
-        
+        result = [f"Local IP Address: {local_ip}", f"External IP Address: {external_ip}"]
+
         # Determine NAT status
         is_nat = local_ip != external_ip and is_private_ip(local_ip)
         
@@ -1785,9 +1783,7 @@ def list_tool_help() -> str:
     """
     tools = get_available_tools()
 
-    output = []
-    output.append("Available Network Diagnostic Tools:")
-    output.append("==================================")
+    output = ["Available Network Diagnostic Tools:", "=================================="]
 
     for name, func in tools.items():
         desc = func.__doc__.split('\n')[0].strip() if func.__doc__ else "No description available"
