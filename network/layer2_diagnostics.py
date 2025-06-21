@@ -33,7 +33,8 @@ def get_local_ip(interface: str = None, silent: bool = False) -> Dict[str, Any]:
         Standardized result dictionary
     """
     start_time = datetime.now()
-    
+    ip_address = None
+
     try:
         if interface:
             # Get IP for specific interface
