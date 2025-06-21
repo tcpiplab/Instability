@@ -364,14 +364,18 @@ def main():
     # Handle different modes
     if args.mode == 'chatbot':
         start_chatbot_mode(model_name=args.model)
+        return None
     elif args.mode == 'manual':
         run_manual_mode(args.tool_name)
+        return None
     elif args.mode == 'test':
         run_test_mode()
+        return None
     elif args.mode == 'run-tests':
         return run_tests_mode()
     elif args.mode == 'help':
         show_help()
+        return None
     else:
         # This should not happen due to choices in argparse
         print(f"{Fore.RED}Invalid mode: {args.mode}{Style.RESET_ALL}")
@@ -381,11 +385,11 @@ def main():
 
 if __name__ == "__main__":
     try:
-        result = main()
-        if result is not None:
-            sys.exit(result)
+        result_of_calling_main = main()
+        if result_of_calling_main is not None:
+            sys.exit(result_of_calling_main)
     except KeyboardInterrupt:
         print("\nExiting...")
-    except Exception as e:
-        print(f"{Fore.RED}Unexpected error: {e}{Style.RESET_ALL}")
+    except Exception as unexpected_error:
+        print(f"{Fore.RED}Unexpected error: {unexpected_error}{Style.RESET_ALL}")
         sys.exit(1)

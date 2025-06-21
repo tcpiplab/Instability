@@ -717,7 +717,7 @@ After tool execution, interpret results concisely without repeating obvious info
                 if len(conversation) > MAX_CONVERSATION_LENGTH + 2:  # +2 for the system messages
 
                     # Keep the first two system messages and the most recent history
-                    conversation = conversation[:2] + conversation[-(MAX_CONVERSATION_LENGTH):]
+                    conversation = conversation[:2] + conversation[-MAX_CONVERSATION_LENGTH:]
 
             except Exception as e:
                 print_error(f"Error generating response: {Fore.RED}{e}{Style.RESET_ALL}")

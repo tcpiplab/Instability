@@ -714,7 +714,9 @@ def standardize_tool_output(tool_name: str = None):
         def wrapper(*args, **kwargs):
             actual_tool_name = tool_name or func.__name__
             start_time = datetime.now()
-            
+
+            target = None
+
             try:
                 # Extract target from args/kwargs if present
                 target = None

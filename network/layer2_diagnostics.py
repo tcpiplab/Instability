@@ -33,7 +33,8 @@ def get_local_ip(interface: str = None, silent: bool = False) -> Dict[str, Any]:
         Standardized result dictionary
     """
     start_time = datetime.now()
-    
+    ip_address = None
+
     try:
         if interface:
             # Get IP for specific interface
@@ -258,7 +259,10 @@ def get_gateway_info(silent: bool = False) -> Dict[str, Any]:
         gateway_mac = None
         try:
             gateway_mac = get_mac_address(gateway_ip)
-        except Exception:
+        except (subprocess.SubprocessError, subprocess.TimeoutExpired, FileNotFoundError, OSError) as error_looking_up_gateway_mac:
+            # MAC address lookup failed but we can continue without it
+            print(f"{Fore.YELLOW}Warning:{Style.RESET_ALL} Failed to get MAC address for gateway {gateway_ip}: {Fore.YELLOW}{error_looking_up_gateway_mac}{Style.RESET_ALL}")
+            print(f"But we can continue without the gateway MAC address.")
             pass
         
         execution_time = (datetime.now() - start_time).total_seconds()
@@ -367,7 +371,10 @@ def get_all_interfaces() -> List[Dict[str, Any]]:
             )
             if result.returncode == 0:
                 interfaces = parse_unix_interfaces(result.stdout)
-    except Exception:
+    except (subprocess.SubprocessError, subprocess.TimeoutExpired, FileNotFoundError, OSError) as error_looking_up_interfaces:
+        print(f"{Fore.YELLOW}Warning:{Style.RESET_ALL} Failed to get network interfaces: {Fore.YELLOW}{error_looking_up_interfaces}{Style.RESET_ALL}")
+        print(f"But we can continue with minimal interface detection.")
+
         # Fallback: minimal interface detection
         try:
             local_ip = socket.gethostbyname(socket.gethostname())
@@ -377,7 +384,10 @@ def get_all_interfaces() -> List[Dict[str, Any]]:
                 "status": "up",
                 "mac": None
             }]
-        except Exception:
+        except (socket.gaierror, socket.herror) as e:
+            # Handle socket hostname resolution errors
+            print(f"{Fore.YELLOW}Warning:{Style.RESET_ALL} Socket hostname resolution failed: {e}")
+
             interfaces = [{
                 "name": "unknown",
                 "ip": "127.0.0.1",
@@ -524,7 +534,10 @@ def get_default_gateway() -> str:
                 if match:
                     return match.group(1)
     
-    except Exception:
+    except (subprocess.SubprocessError, subprocess.TimeoutExpired, FileNotFoundError, OSError) as gateway_lookup_error:
+        # Fallback when subprocess commands fail
+        print(f"{Fore.YELLOW}Warning:{Style.RESET_ALL} Failed to get default gateway: {Fore.YELLOW}{gateway_lookup_error}{Style.RESET_ALL}")
+        print(f"But we can continue by trying minimal gateway detection using a raw socket.")
         pass
     
     # Fallback: try to determine gateway by connecting
@@ -535,8 +548,14 @@ def get_default_gateway() -> str:
             # Assume gateway is .1 of the same subnet
             gateway_ip = '.'.join(local_ip.split('.')[:-1]) + '.1'
             return gateway_ip
-    except Exception:
-        raise Exception("Unable to determine default gateway")
+
+    except (socket.error, socket.timeout, socket.gaierror, ConnectionRefusedError, ConnectionError, OSError
+            ) as error_using_socket_to_determine_gateway_ip:
+
+        print(f"{Fore.YELLOW}Warning:{Style.RESET_ALL} Failed to determine default gateway using socket: {Fore.YELLOW}{error_using_socket_to_determine_gateway_ip}{Style.RESET_ALL}")
+
+        # TODO: This chatbot should function even in total network outage scenarios, so instead of raising an exception, we should tell the user and we should save the error in the chatbot's context.
+        raise Exception(f"Unable to determine default gateway: {error_using_socket_to_determine_gateway_ip}")
 
 
 def get_mac_address(ip_address: str) -> Optional[str]:
@@ -565,7 +584,9 @@ def get_mac_address(ip_address: str) -> Optional[str]:
             if mac_match:
                 return mac_match.group(1)
     
-    except Exception:
+    except (subprocess.SubprocessError, subprocess.TimeoutExpired, FileNotFoundError, OSError, re.error) as error_looking_up_mac_address:
+        print(f"{Fore.YELLOW}Warning:{Style.RESET_ALL} Failed to get MAC address for {ip_address}: {Fore.YELLOW}{error_looking_up_mac_address}{Style.RESET_ALL}")
+        print(f"But we can continue without the MAC address.")
         pass
     
     return None

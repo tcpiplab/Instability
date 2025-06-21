@@ -399,8 +399,15 @@ def get_network_interfaces() -> List[Dict[str, Any]]:
                                 "name": iface_name,
                                 "status": "up"
                             })
-    except Exception:
-        # Fallback: minimal interface detection
+
+    except (subprocess.SubprocessError, FileNotFoundError) as e:
+        # Handle subprocess execution errors
+        interfaces.append({
+            "name": "default",
+            "status": "unknown"
+        })
+    except (IndexError, ValueError) as e:
+        # Handle parsing errors
         interfaces.append({
             "name": "default",
             "status": "unknown"
@@ -416,7 +423,8 @@ def get_local_ip() -> str:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("8.8.8.8", 80))
             return s.getsockname()[0]
-    except Exception:
+
+    except (socket.error, OSError, ConnectionError) as e:
         return "127.0.0.1"
 
 
@@ -438,7 +446,7 @@ def test_dns_resolution() -> Dict[str, Any]:
             try:
                 socket.gethostbyname("google.com")
                 successful_resolves += 1
-            except Exception:
+            except (socket.gaierror, socket.timeout, socket.herror):
                 continue
         
         if successful_resolves > 0:
@@ -472,7 +480,7 @@ def test_web_connectivity() -> Dict[str, Any]:
                 response = requests.get(site, timeout=10)
                 if response.status_code == 200:
                     successful_connections += 1
-            except Exception:
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.RequestException):
                 continue
         
         if successful_connections > 0:

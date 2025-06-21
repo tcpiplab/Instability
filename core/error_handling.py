@@ -266,7 +266,8 @@ class ErrorRecovery:
                     time.sleep(delay)
                     continue
                 raise last_exception
-    
+        return None
+
     @staticmethod
     def find_available_tool(primary_tool: str, fallback_tools: List[str]) -> Optional[str]:
         """

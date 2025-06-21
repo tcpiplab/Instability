@@ -418,7 +418,9 @@ def _get_ssl_info_from_response(response) -> Optional[Dict[str, Any]]:
     try:
         # Try to get SSL socket from response
         if hasattr(response, 'fp') and hasattr(response.fp, 'raw'):
-            sock = response.fp.raw._sock
+            # sock = response.fp.raw._sock
+            # pylint: disable=protected-access
+            sock = getattr(response.fp.raw, '_sock', None)
             if hasattr(sock, 'getpeercert'):
                 cert = sock.getpeercert()
                 if cert:
