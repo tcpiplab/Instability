@@ -399,8 +399,15 @@ def get_network_interfaces() -> List[Dict[str, Any]]:
                                 "name": iface_name,
                                 "status": "up"
                             })
-    except Exception:
-        # Fallback: minimal interface detection
+
+    except (subprocess.SubprocessError, FileNotFoundError) as e:
+        # Handle subprocess execution errors
+        interfaces.append({
+            "name": "default",
+            "status": "unknown"
+        })
+    except (IndexError, ValueError) as e:
+        # Handle parsing errors
         interfaces.append({
             "name": "default",
             "status": "unknown"

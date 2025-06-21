@@ -33,8 +33,8 @@ from config import get_dns_servers, DNS_TEST_SERVERS, COMMON_PORTS
 try:
     from pentest.nmap_wrapper import run_nmap_scan, quick_port_scan, network_discovery, service_version_scan, os_detection_scan, comprehensive_scan
     PENTEST_TOOLS_AVAILABLE = True
-except ImportError as e:
-    print(f"{Fore.YELLOW}Warning: Pentest tools not available: {e}{Style.RESET_ALL}")
+except ImportError as import_nmap_error:
+    print(f"{Fore.YELLOW}Warning: Pentest tools not available: {import_nmap_error}{Style.RESET_ALL}")
     PENTEST_TOOLS_AVAILABLE = False
 
 # Import v3 layer2 diagnostic tools
@@ -55,8 +55,8 @@ try:
         """Get default gateway information including IP and MAC address."""
         return _get_gateway_info(silent=silent)
         
-except ImportError as e:
-    print(f"{Fore.YELLOW}Warning: Layer2 diagnostic tools not available: {e}{Style.RESET_ALL}")
+except ImportError as import_layer2_tools_error:
+    print(f"{Fore.YELLOW}Warning: Layer2 diagnostic tools not available: {import_layer2_tools_error}{Style.RESET_ALL}")
     LAYER2_TOOLS_AVAILABLE = False
 
 # Add parent directory to path to allow importing from original modules
@@ -77,8 +77,8 @@ try:
     from os_utils import get_os_type
 
     ORIGINAL_TOOLS_AVAILABLE = True
-except ImportError as e:
-    print(f"{Fore.YELLOW}Warning: Some original tools not available: {e}{Style.RESET_ALL}")
+except ImportError as import_error:
+    print(f"{Fore.YELLOW}Warning: Some original tools not available: {import_error}{Style.RESET_ALL}")
     print(f"{Fore.YELLOW}Fallback implementations will be used where possible.{Style.RESET_ALL}")
 
 
@@ -99,8 +99,8 @@ def get_os_info() -> Dict[str, Any]:
                     execution_time=execution_time,
                     command_executed="get_os_type() (original tool)"
                 )
-            except Exception as e:
-                print(f"{Fore.YELLOW}Error using original get_os_type: {e}{Style.RESET_ALL}")
+            except Exception as error_get_os_type:
+                print(f"{Fore.YELLOW}Error using original get_os_type: {error_get_os_type}{Style.RESET_ALL}")
 
         # Fallback implementation
         system = platform.system()

@@ -385,11 +385,11 @@ def main():
 
 if __name__ == "__main__":
     try:
-        result = main()
-        if result is not None:
-            sys.exit(result)
+        result_of_calling_main = main()
+        if result_of_calling_main is not None:
+            sys.exit(result_of_calling_main)
     except KeyboardInterrupt:
         print("\nExiting...")
-    except Exception as e:
-        print(f"{Fore.RED}Unexpected error: {e}{Style.RESET_ALL}")
+    except Exception as unexpected_error:
+        print(f"{Fore.RED}Unexpected error: {unexpected_error}{Style.RESET_ALL}")
         sys.exit(1)
