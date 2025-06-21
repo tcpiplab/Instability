@@ -50,7 +50,12 @@ def test_http_connectivity(url: str, timeout: int = 10, follow_redirects: bool =
     if not url.startswith(('http://', 'https://')):
         url = 'https://' + url
         result["url"] = url
-    
+
+    # Explicit scheme validation
+    parsed_url = urllib.parse.urlparse(url)
+    if parsed_url.scheme not in ('http', 'https'):
+        raise ValueError(f"Unsupported URL scheme: {parsed_url.scheme}")
+
     try:
         start_time = time.time()
         
