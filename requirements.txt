@@ -1,4 +1,8 @@
 ollama
 colorama
 rich
+requests
+cryptography
+dnspython
+# Only needed for Windows to handle console input/output
 pyreadline3; platform_system == "Windows"
