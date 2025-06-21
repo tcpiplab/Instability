@@ -12,6 +12,7 @@ import time
 import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+from requests.exceptions import RequestException
 
 # Import colorama for terminal colors
 from colorama import Fore, Style
@@ -41,6 +42,7 @@ def get_external_ip(timeout: int = 10, silent: bool = False) -> Dict[str, Any]:
     
     # Try multiple services for reliability
     ip_services = [
+        "https://ipinfo.io/ip",
         "https://api.ipify.org",
         "https://icanhazip.com",
         "https://ident.me",
@@ -81,11 +83,28 @@ def get_external_ip(timeout: int = 10, silent: bool = False) -> Dict[str, Any]:
                             "target": None,
                             "options_used": {"timeout": timeout}
                         }
-            except Exception:
+            except RequestException as error_trying_to_get_external_ip:
+                # RequestException is the base class for all requests-specific exceptions
+                print(f"{Fore.RED}Error: Failed to get external IP from {service}: {error_trying_to_get_external_ip}{Style.RESET_ALL}")
+                print(f"Retrying with next service...")
                 continue
         
         # If all services failed
-        raise Exception("All IP detection services failed")
+        print(f"{Fore.RED}Error: All external IP detection services failed.{Style.RESET_ALL}")
+        execution_time = (datetime.now() - start_time).total_seconds()
+        print(f"This might mean that our local network has no connectivity to the internet.")
+
+        return create_network_error(
+            ErrorCode.UNREACHABLE,
+            tool_name="get_external_ip",
+            execution_time=execution_time,
+            details={
+                "command": f"get_external_ip(timeout={timeout})",
+                "options": {"timeout": timeout}
+            },
+            error_type=ErrorType.NETWORK,
+            error_message="All external IP detection services failed"
+        )
     
     except ImportError:
         execution_time = (datetime.now() - start_time).total_seconds()
