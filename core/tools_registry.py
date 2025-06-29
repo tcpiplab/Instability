@@ -129,8 +129,7 @@ class ToolRegistry:
                 module = importlib.import_module(metadata.module_path)
                 metadata.function_ref = getattr(module, metadata.function_name)
             except (ImportError, AttributeError) as e:
-                print(f"Warning: Could not load function {metadata.function_name} from {metadata.module_path}: {e}")
-                metadata.function_ref = None
+                metadata.function_ref = None  # Silently set to None for failed imports
         
         # Register tool
         self._tools[metadata.name] = metadata
@@ -217,8 +216,7 @@ class ToolRegistry:
             return discovered
             
         except ImportError as e:
-            print(f"Warning: Could not import module {module_path}: {e}")
-            return {}
+            return {}  # Silently return empty dict for failed imports
     
     def auto_discover_tools(self) -> None:
         """
@@ -241,7 +239,7 @@ class ToolRegistry:
                             self.discover_module_tools(module_path)
                         
             except (ImportError, FileNotFoundError, AttributeError) as e:
-                print(f"Warning: Could not discover tools in {base_path}: {e}")
+                pass  # Silently skip missing modules during auto-discovery
         
         # Discover additional standalone modules
         for module_path in self._additional_modules:
@@ -250,7 +248,7 @@ class ToolRegistry:
                 if self._is_safe_module_path(module_path):
                     self.discover_module_tools(module_path)
             except Exception as e:
-                print(f"Warning: Could not discover tools in {module_path}: {e}")
+                pass  # Silently skip modules that can't be imported
 
 
     def integrate_external_tools(self) -> None:
@@ -258,8 +256,14 @@ class ToolRegistry:
         Integrate external tool detection with registry.
         """
         try:
-            from pentest.tool_detector import scan_for_tools
-            external_tools_inventory = scan_for_tools()
+            # Suppress stdout during tool detection to prevent MCP interference
+            import contextlib
+            import io
+            
+            with contextlib.redirect_stdout(io.StringIO()):
+                from pentest.tool_detector import scan_for_tools
+                external_tools_inventory = scan_for_tools()
+            
             # Extract the tools dictionary from the inventory structure
             self._external_tools = external_tools_inventory.get("tools", {})
             
@@ -269,7 +273,7 @@ class ToolRegistry:
                     # Create metadata for external tool
                     metadata = ToolMetadata(
                         name=tool_name,
-                        function_name=f"run_{tool_name}",
+                        function_name=f"run_{tool_name}_scan",
                         module_path=f"pentest.{tool_name}_wrapper",
                         description=f"External {tool_name} tool",
                         category=ToolCategory.PENTESTING,
@@ -294,7 +298,7 @@ class ToolRegistry:
                         pass
                         
         except ImportError:
-            print("Warning: Tool detector not available")
+            pass  # Silently skip if tool detector not available
     
     def get_tool(self, name: str) -> Optional[ToolMetadata]:
         """

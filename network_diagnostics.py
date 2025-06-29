@@ -78,8 +78,10 @@ try:
 
     ORIGINAL_TOOLS_AVAILABLE = True
 except ImportError as import_error:
-    print(f"{Fore.YELLOW}Warning: Some original tools not available: {import_error}{Style.RESET_ALL}")
-    print(f"{Fore.YELLOW}Fallback implementations will be used where possible.{Style.RESET_ALL}")
+    # Only print warnings if we're not in MCP mode (when stdout needs to be clean)
+    if not os.environ.get('MCP_MODE'):
+        print(f"{Fore.YELLOW}Warning: Some original tools not available: {import_error}{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}Fallback implementations will be used where possible.{Style.RESET_ALL}")
 
 
 # Basic tool implementations (fallbacks if original tools are not available)
