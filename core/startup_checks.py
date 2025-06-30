@@ -134,11 +134,12 @@ def run_phase1_core_system(silent: bool = False) -> Dict[str, Any]:
     # Check 2: Ollama Connectivity
     ollama_result = check_ollama_connectivity()
     phase_result["checks"]["ollama_connectivity"] = ollama_result
-    if ollama_result["status"] != "success":
+    if not ollama_result["success"]:
         phase_result["status"] = "warning"
     if not silent:
-        status_text = f"[{Fore.GREEN}OK{Style.RESET_ALL}]" if ollama_result["status"] == "success" else f"[{Fore.YELLOW}WARN{Style.RESET_ALL}]"
-        print(f"  {status_text} Ollama: {ollama_result['message']}")
+        status_text = f"[{Fore.GREEN}OK{Style.RESET_ALL}]" if ollama_result["success"] else f"[{Fore.YELLOW}WARN{Style.RESET_ALL}]"
+        message = ollama_result["stdout"] if ollama_result["success"] else ollama_result["error_message"]
+        print(f"  {status_text} Ollama: {message}")
     
     # Check 3: Network Interfaces
     try:
@@ -342,34 +343,54 @@ def run_phase4_target_scope(silent: bool = False) -> Dict[str, Any]:
 # Helper functions for individual checks
 
 def check_ollama_connectivity() -> Dict[str, Any]:
-    """Check if Ollama API is accessible."""
+    """
+    Check if Ollama API is accessible and responsive.
+    
+    This function tests the connectivity to the Ollama API server and reports
+    the status and number of available models. Useful for troubleshooting
+    Ollama-related issues or verifying the service is running.
+    
+    Common use cases:
+    - "Is Ollama running?"
+    - "Check Ollama status"
+    - "Is the Ollama service available?"
+    - "How many models are available in Ollama?"
+    
+    Returns:
+        Dict containing success status, output message, and parsed data
+        with model count and availability information.
+    """
     try:
         import requests
         response = requests.get(f"{OLLAMA_API_URL}/api/tags", timeout=OLLAMA_TIMEOUT)
         if response.status_code == 200:
             models = response.json().get("models", [])
             return {
-                "status": "success",
-                "result": {"available": True, "models": len(models)},
-                "message": f"Connected, {len(models)} models available"
+                "success": True,
+                "stdout": f"Connected, {len(models)} models available",
+                "parsed_data": {"available": True, "models": len(models)},
+                "error_message": ""
             }
         else:
             return {
-                "status": "error",
-                "result": {"available": False},
-                "message": f"API returned status {response.status_code}"
+                "success": False,
+                "stdout": "",
+                "parsed_data": {"available": False},
+                "error_message": f"API returned status {response.status_code}"
             }
     except ImportError:
         return {
-            "status": "error",
-            "result": {"available": False},
-            "message": "requests library not available"
+            "success": False,
+            "stdout": "",
+            "parsed_data": {"available": False},
+            "error_message": "requests library not available"
         }
     except Exception as e:
         return {
-            "status": "error",
-            "result": {"available": False},
-            "message": f"Connection failed: {Fore.RED}{e}{Style.RESET_ALL}"
+            "success": False,
+            "stdout": "",
+            "parsed_data": {"available": False},
+            "error_message": f"Connection failed: {str(e)}"
         }
 
 
@@ -544,6 +565,30 @@ def test_startup_checks():
     print("Testing startup checks module...")
     results = run_startup_sequence(silent=False)
     return results
+
+
+def get_module_tools():
+    """Get tool metadata for functions in this module."""
+    from core.tools_registry import ToolMetadata, ParameterInfo, ParameterType, ToolCategory
+    
+    return {
+        "check_ollama_connectivity": ToolMetadata(
+            name="check_ollama_connectivity",
+            function_name="check_ollama_connectivity",
+            module_path="core.startup_checks",
+            description="Check if Ollama API is accessible and responsive",
+            category=ToolCategory.SYSTEM_INFO,
+            parameters={},  # No parameters required
+            modes=["manual", "chatbot"],
+            aliases=["ollama_status", "is_ollama_running", "ollama_connectivity"],
+            examples=[
+                "check_ollama_connectivity",
+                "is ollama running?",
+                "check ollama status"
+            ],
+            function_ref=check_ollama_connectivity
+        )
+    }
 
 
 if __name__ == "__main__":

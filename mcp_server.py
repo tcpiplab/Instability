@@ -53,13 +53,15 @@ async def main():
         
         # Run with stdio transport
         from mcp.server import stdio, InitializationOptions
-        from mcp.types import ServerCapabilities
+        from mcp.types import ServerCapabilities, ToolsCapability
         try:
             async with (stdio.stdio_server() as (read_stream, write_stream)):
                 init_options = InitializationOptions(
                     server_name="instability-chatbot",
                     server_version="1.0.0",
-                    capabilities=ServerCapabilities()
+                    capabilities=ServerCapabilities(
+                        tools=ToolsCapability()
+                    )
                 )
                 
                 await server.run(
