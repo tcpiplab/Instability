@@ -534,6 +534,14 @@ When you need specific information, you can call a tool using this format:
 TOOL: tool_name
 ARGS: {{"arg_name": "value"}} (or {{}} if no arguments needed)
 
+Examples:
+- TOOL: ping_target
+  ARGS: {{"target": "google.com"}}
+- TOOL: traceroute_host  
+  ARGS: {{"target": "www.tcpiplab.com"}}
+- TOOL: get_external_ip
+  ARGS: {{}}
+
 STOP after the tool call. Do NOT include any text like "Tool result:", example output, or sample data. The system will execute the tool and provide the real result.
 
 CONTEXT AWARENESS: When users ask about "we", "our machine", "this system", or "localhost", they mean the LOCAL machine you're running on. When they specify IP addresses or hostnames, they mean REMOTE targets.
@@ -551,6 +559,7 @@ Examples of when you MUST use tools:
 - Speed or bandwidth questions → use run_speed_test
 - Questions about Ollama status (is ollama running? ollama connectivity?) → use check_ollama_connectivity
 - Questions about the local operating system (this machine, localhost) → use get_os_info
+- Traceroute questions (run traceroute, trace route to host) → use traceroute_host
 - Port scanning or service detection on remote hosts → use nmap_scan, quick_port_scan, service_version_scan
 - Network discovery or host discovery on remote networks → use network_discovery
 - OS fingerprinting of remote hosts/targets → use os_detection_scan
