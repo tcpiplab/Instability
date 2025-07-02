@@ -172,7 +172,37 @@ class ToolRegistry:
             
             # Fallback: scan for functions with proper signatures
             discovered = {}
-            excluded_functions = {'get_tool_registry'}  # Functions that shouldn't be registered as tools
+            excluded_functions = {
+                'get_tool_registry',
+                # Error handling utilities
+                'create_error_response', 'create_input_error', 'create_network_error', 
+                'create_system_error', 'create_execution_error',
+                # Parsing utilities
+                'parse_ping_output', 'parse_traceroute_output', 'parse_unix_interface_ip',
+                'parse_unix_interfaces', 'parse_windows_interface_ip', 'parse_windows_interfaces',
+                'parse_version_output', 'parse_network_state_markdown', 'parse_target_scope_markdown',
+                # Validation utilities
+                'is_valid_ip', 'get_timeout',
+                # Cache/memory utilities
+                'cache_tool_result', 'get_cached_result', 'load_session_cache', 'save_session_cache',
+                'load_tool_inventory_cache', 'save_tool_inventory_cache',
+                # Formatting utilities
+                'format_tool_inventory_summary', 'format_targets_section', 'update_markdown_sections',
+                # Test functions
+                'test_layer2_diagnostics', 'test_layer3_diagnostics', 'test_tool_detector', 'test_memory_manager',
+                # Standard library functions
+                'dataclass', 'field',
+                # Internal tool detector utilities
+                'colorama_init', 'check_predefined_paths', 'check_tool_in_path', 'detect_tool_installation',
+                'get_platform_install_command', 'get_tool_version', 'print_tool_recommendations',
+                'get_available_tools', 'get_missing_tools', 'get_tools_by_category',
+                # Memory management functions that are too low-level for direct use
+                'create_default_network_state', 'create_default_target_scope', 'create_empty_session_cache',
+                'get_memory_dir', 'initialize_memory_files', 'read_network_state', 'read_target_scope',
+                'update_network_state', 'update_target_scope',
+                # Low-level utilities that should be wrapped by higher-level tools
+                'get_hostname_for_ip', 'detect_local_network'
+            }
             for name, obj in inspect.getmembers(module, inspect.isfunction):
                 if name.startswith('_') or name in excluded_functions:
                     continue
