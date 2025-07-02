@@ -172,8 +172,9 @@ class ToolRegistry:
             
             # Fallback: scan for functions with proper signatures
             discovered = {}
+            excluded_functions = {'get_tool_registry'}  # Functions that shouldn't be registered as tools
             for name, obj in inspect.getmembers(module, inspect.isfunction):
-                if name.startswith('_'):
+                if name.startswith('_') or name in excluded_functions:
                     continue
                 
                 # Create basic metadata from function
