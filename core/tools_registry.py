@@ -8,6 +8,7 @@ consistent metadata, and unified execution interface.
 import importlib
 import inspect
 import os
+import re
 from dataclasses import dataclass, field
 from types import ModuleType
 from typing import Dict, Any, List, Optional, Callable, Union
@@ -469,7 +470,26 @@ class ToolRegistry:
         # Execute tool
         if metadata.function_ref:
             try:
-                result = metadata.function_ref(**filtered_parameters)
+                # Check if running in MCP mode - suppress output to prevent UI crashes
+                if os.environ.get('MCP_MODE') == '1':
+                    # Force silent mode for MCP to prevent Claude Desktop crashes
+                    if 'silent' in metadata.parameters:
+                        filtered_parameters['silent'] = True
+                    
+                    # Suppress ALL stdout/stderr during tool execution in MCP mode
+                    import contextlib
+                    import io
+                    
+                    with contextlib.redirect_stdout(io.StringIO()), \
+                         contextlib.redirect_stderr(io.StringIO()):
+                        result = metadata.function_ref(**filtered_parameters)
+                else:
+                    result = metadata.function_ref(**filtered_parameters)
+                
+                # Sanitize output for MCP compatibility
+                if os.environ.get('MCP_MODE') == '1':
+                    result = self._sanitize_for_mcp(result)
+                
                 return result
             except Exception as e:
                 return create_error_response(
@@ -485,6 +505,50 @@ class ToolRegistry:
                 f"Tool function not available",
                 tool_name=tool_name
             )
+    
+    def _sanitize_for_mcp(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Clean tool output for MCP compatibility by removing terminal colors
+        and ensuring JSON-serializable content.
+        
+        Args:
+            result: Tool result dictionary
+            
+        Returns:
+            Sanitized result dictionary
+        """
+        if not isinstance(result, dict):
+            return result
+        
+        sanitized = {}
+        for key, value in result.items():
+            if isinstance(value, str):
+                # Strip ANSI color codes and control characters
+                clean_value = re.sub(r'\x1b\[[0-9;]*[mK]', '', value)
+                # Remove any remaining control characters except newlines/tabs
+                clean_value = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', clean_value)
+                sanitized[key] = clean_value
+            elif isinstance(value, dict):
+                # Recursively sanitize nested dictionaries
+                sanitized[key] = self._sanitize_for_mcp(value)
+            elif isinstance(value, list):
+                # Sanitize list elements
+                sanitized_list = []
+                for item in value:
+                    if isinstance(item, dict):
+                        sanitized_list.append(self._sanitize_for_mcp(item))
+                    elif isinstance(item, str):
+                        clean_item = re.sub(r'\x1b\[[0-9;]*[mK]', '', item)
+                        clean_item = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', clean_item)
+                        sanitized_list.append(clean_item)
+                    else:
+                        sanitized_list.append(item)
+                sanitized[key] = sanitized_list
+            else:
+                # Keep other types as-is (numbers, booleans, None)
+                sanitized[key] = value
+        
+        return sanitized
     
     def get_tool_help(self, tool_name: str) -> Optional[str]:
         """

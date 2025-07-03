@@ -60,14 +60,39 @@ class InstabilityChatbotMCPServer(Server):
             # Convert to MCP tool format
             mcp_tools = []
             for name, metadata in tools.items():
-                # Convert parameters to MCP format
+                # Convert parameters to MCP format with proper JSON Schema types
                 parameters = {}
                 for param_name, param_info in metadata.parameters.items():
-                    parameters[param_name] = {
-                        "type": param_info.param_type.value,
-                        "description": param_info.description,
-                        "required": param_info.required
+                    # Map Python type names to JSON Schema type names
+                    type_mapping = {
+                        "str": "string",
+                        "int": "integer", 
+                        "float": "number",
+                        "bool": "boolean",
+                        "list": "array",
+                        "dict": "object"
                     }
+                    
+                    json_schema_type = type_mapping.get(param_info.param_type.value, "string")
+                    
+                    param_schema = {
+                        "type": json_schema_type,
+                        "description": param_info.description
+                    }
+                    
+                    # Add default value if provided
+                    if param_info.default is not None:
+                        param_schema["default"] = param_info.default
+                    
+                    # Add constraints if provided  
+                    if param_info.choices:
+                        param_schema["enum"] = param_info.choices
+                    if param_info.min_value is not None:
+                        param_schema["minimum"] = param_info.min_value
+                    if param_info.max_value is not None:
+                        param_schema["maximum"] = param_info.max_value
+                    
+                    parameters[param_name] = param_schema
                 
                 mcp_tool = types.Tool(
                     name=name,
