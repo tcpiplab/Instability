@@ -175,12 +175,37 @@ This implementation follows these key principles:
 5. **Intelligence**: Smart tool detection with installation guidance
 6. **Usability**: Intuitive interface with comprehensive startup assessment
 
+## MCP (Model Context Protocol) Server
+
+Instability v3 includes a built-in MCP server that exposes all network diagnostics and pentesting tools through the Model Context Protocol, making them accessible to any MCP-compatible client.
+
+### Compatibility
+- ✅ **Claude Desktop**: Fully compatible and tested
+- ✅ **VS Code GitHub Copilot**: Fully compatible and tested
+- ✅ **Other MCP clients**: Should work with any MCP-compatible application
+
+### Setup
+1. Generate API key and configure authentication:
+```bash
+python setup_mcp_auth.py
+```
+
+2. Add the server configuration to your MCP client (e.g., Claude Desktop)
+
+3. Start the MCP server:
+```bash
+python mcp_server.py
+```
+
+See `MCP_AUTHENTICATION.md` for detailed setup instructions.
+
 ## Dependencies
 
 ### Required Python Packages
 - `ollama`: For interfacing with local LLM
 - `colorama`: For colorized terminal output
 - `readline` (Unix/macOS) or `pyreadline3` (Windows): For command history and completion
+- `mcp`: For MCP server functionality
 
 ### External Tools (Detected at Startup)
 - `nmap`: Network mapping and port scanning
