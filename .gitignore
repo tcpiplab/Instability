@@ -13,3 +13,6 @@ memory/session_cache.json
 /semgrep_results*.sarif
 /.vscode/
 /.claude/
+
+# Environment variables
+.env

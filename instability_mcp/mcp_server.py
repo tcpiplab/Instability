@@ -18,6 +18,7 @@ except ImportError:
     raise ImportError("MCP package not installed. Install with: pip install mcp")
 
 from instability_mcp.session_manager import SessionManager
+from instability_mcp.auth import setup_mcp_auth, create_auth_error_response, MCPAuthError
 from core.tools_registry import get_tool_registry
 from core.startup_checks import run_startup_sequence
 
@@ -31,6 +32,9 @@ class InstabilityChatbotMCPServer(Server):
         self.tool_registry = get_tool_registry()
         self.startup_context = None
         self._logger = logging.getLogger(__name__)
+        
+        # Initialize authentication
+        self.authenticator = setup_mcp_auth()
         
         # Register request handlers
         self._register_handlers()
