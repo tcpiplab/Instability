@@ -84,6 +84,28 @@ class InstabilityChatbotMCPServer(Server):
                         "description": param_info.description
                     }
                     
+                    # Add items property for array types (required by JSON Schema spec)
+                    if json_schema_type == "array":
+                        # Determine item type based on parameter name and context
+                        if param_name in ["servers", "dns_servers"] or "server" in param_name.lower():
+                            # DNS server IP addresses
+                            param_schema["items"] = {"type": "string"}
+                        elif param_name in ["urls", "endpoints"] or "url" in param_name.lower():
+                            # URLs
+                            param_schema["items"] = {"type": "string"}
+                        elif param_name in ["targets", "hosts"] or "target" in param_name.lower():
+                            # Target objects
+                            param_schema["items"] = {"type": "object"}
+                        elif param_name in ["tools", "commands"] or "tool" in param_name.lower():
+                            # Tool names
+                            param_schema["items"] = {"type": "string"}
+                        elif param_name in ["ports", "port_list"] or "port" in param_name.lower():
+                            # Port numbers
+                            param_schema["items"] = {"type": "integer"}
+                        else:
+                            # Default to string items for unknown array types
+                            param_schema["items"] = {"type": "string"}
+                    
                     # Add default value if provided
                     if param_info.default is not None:
                         param_schema["default"] = param_info.default
