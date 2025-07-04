@@ -16,3 +16,6 @@ memory/session_cache.json
 
 # Environment variables
 .env
+/debug.log
+/docs/Instability Chatbot MCP Server Implementation Plan.pdf
+/docs/mcp-implementation-plan.md
