@@ -261,8 +261,9 @@ def get_gateway_info(silent: bool = False) -> Dict[str, Any]:
             gateway_mac = get_mac_address(gateway_ip)
         except (subprocess.SubprocessError, subprocess.TimeoutExpired, FileNotFoundError, OSError) as error_looking_up_gateway_mac:
             # MAC address lookup failed but we can continue without it
-            print(f"{Fore.YELLOW}Warning:{Style.RESET_ALL} Failed to get MAC address for gateway {gateway_ip}: {Fore.YELLOW}{error_looking_up_gateway_mac}{Style.RESET_ALL}")
-            print(f"But we can continue without the gateway MAC address.")
+            if not silent:
+                print(f"{Fore.YELLOW}Warning:{Style.RESET_ALL} Failed to get MAC address for gateway {gateway_ip}: {Fore.YELLOW}{error_looking_up_gateway_mac}{Style.RESET_ALL}")
+                print(f"But we can continue without the gateway MAC address.")
             pass
         
         execution_time = (datetime.now() - start_time).total_seconds()

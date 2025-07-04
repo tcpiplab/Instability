@@ -68,34 +68,86 @@ def test_http_connectivity(url: str, timeout: int = 10, follow_redirects: bool =
             opener = urllib.request.build_opener()
             opener.add_handler(urllib.request.HTTPRedirectHandler())
         
-        # Make request
-        with urllib.request.urlopen(req, timeout=timeout) as response:
-            end_time = time.time()
-            result["response_time_ms"] = round((end_time - start_time) * 1000, 2)
+        # Make request with proper SSL context for HTTPS
+        if url.startswith('https://'):
+            context = ssl.create_default_context()
+            # Load system certificate store on macOS
+            import platform
+            if platform.system() == 'Darwin':
+                # On macOS, explicitly load system certificates
+                context.load_default_certs()
+                # Try loading from macOS keychain
+                try:
+                    context.load_verify_locations('/etc/ssl/cert.pem')
+                except FileNotFoundError:
+                    pass
+                try:
+                    context.load_verify_locations('/System/Library/OpenSSL/certs/cert.pem')
+                except FileNotFoundError:
+                    pass
+            # Ensure only secure protocols (TLS 1.2 and above) are used
+            if hasattr(ssl, 'TLSVersion'):  # Python 3.7+
+                context.minimum_version = ssl.TLSVersion.TLSv1_2
+            else:  # For older Python versions
+                context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1
             
-            # Get response details
-            result["status_code"] = response.getcode()
-            result["final_url"] = response.geturl()
-            result["content_length"] = response.headers.get('Content-Length')
-            result["content_type"] = response.headers.get('Content-Type')
-            result["server"] = response.headers.get('Server')
-            
-            # Count redirects
-            if result["final_url"] != url:
-                result["redirect_count"] = 1  # Basic redirect detection
-            
-            # Get SSL info for HTTPS
-            if url.startswith('https://'):
-                ssl_info = _get_ssl_info_from_response(response)
-                if ssl_info:
-                    result["ssl_info"] = ssl_info
-            
-            result["success"] = True
-            
-            if not silent:
-                print(f"{Fore.GREEN}✓ HTTP {result['status_code']}: {result['response_time_ms']}ms{Fore.RESET}")
-                if result["redirect_count"] > 0:
-                    print(f"{Fore.YELLOW}  → Redirected to: {result['final_url']}{Fore.RESET}")
+            https_handler = urllib.request.HTTPSHandler(context=context)
+            opener = urllib.request.build_opener(https_handler)
+            with opener.open(req, timeout=timeout) as response:
+                end_time = time.time()
+                result["response_time_ms"] = round((end_time - start_time) * 1000, 2)
+                
+                # Get response details
+                result["status_code"] = response.getcode()
+                result["final_url"] = response.geturl()
+                result["content_length"] = response.headers.get('Content-Length')
+                result["content_type"] = response.headers.get('Content-Type')
+                result["server"] = response.headers.get('Server')
+                
+                # Count redirects
+                if result["final_url"] != url:
+                    result["redirect_count"] = 1  # Basic redirect detection
+                
+                # Get SSL info for HTTPS
+                if url.startswith('https://'):
+                    ssl_info = _get_ssl_info_from_response(response)
+                    if ssl_info:
+                        result["ssl_info"] = ssl_info
+                
+                result["success"] = True
+                
+                if not silent:
+                    print(f"{Fore.GREEN} HTTP {result['status_code']}: {result['response_time_ms']}ms{Fore.RESET}")
+                    if result["redirect_count"] > 0:
+                        print(f"{Fore.YELLOW}  → Redirected to: {result['final_url']}{Fore.RESET}")
+        else:
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                end_time = time.time()
+                result["response_time_ms"] = round((end_time - start_time) * 1000, 2)
+                
+                # Get response details
+                result["status_code"] = response.getcode()
+                result["final_url"] = response.geturl()
+                result["content_length"] = response.headers.get('Content-Length')
+                result["content_type"] = response.headers.get('Content-Type')
+                result["server"] = response.headers.get('Server')
+                
+                # Count redirects
+                if result["final_url"] != url:
+                    result["redirect_count"] = 1  # Basic redirect detection
+                
+                # Get SSL info for HTTPS
+                if url.startswith('https://'):
+                    ssl_info = _get_ssl_info_from_response(response)
+                    if ssl_info:
+                        result["ssl_info"] = ssl_info
+                
+                result["success"] = True
+                
+                if not silent:
+                    print(f"{Fore.GREEN} HTTP {result['status_code']}: {result['response_time_ms']}ms{Fore.RESET}")
+                    if result["redirect_count"] > 0:
+                        print(f"{Fore.YELLOW}  → Redirected to: {result['final_url']}{Fore.RESET}")
     
     except urllib.error.HTTPError as e:
         result["status_code"] = e.code
@@ -291,32 +343,70 @@ def test_web_service_health(url: str, expected_status: int = 200, timeout: int =
         req = urllib.request.Request(url)
         req.add_header('User-Agent', 'instability.py/3.0 (Health Check)')
         
-        with urllib.request.urlopen(req, timeout=timeout) as response:
-            end_time = time.time()
-            result["response_time_ms"] = round((end_time - start_time) * 1000, 2)
-            result["status_code"] = response.getcode()
+        # Use custom SSL context for HTTPS URLs
+        if url.startswith('https://'):
+            context = ssl.create_default_context()
+            # Ensure only secure protocols (TLS 1.2 and above) are used
+            if hasattr(ssl, 'TLSVersion'):  # Python 3.7+
+                context.minimum_version = ssl.TLSVersion.TLSv1_2
+            else:  # For older Python versions
+                context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1
             
-            # Store headers
-            result["headers"] = dict(response.headers)
-            
-            # Read a small amount of content for preview
-            try:
-                content = response.read(500)  # First 500 bytes
-                if content:
-                    result["content_preview"] = content.decode('utf-8', errors='ignore')[:200]
-            except Exception:
-                pass
-            
-            result["healthy"] = result["status_code"] == expected_status
-            result["success"] = True
-            
-            if not silent:
-                status_color = Fore.GREEN if result["healthy"] else Fore.YELLOW
-                health_symbol = "✓" if result["healthy"] else "⚠"
-                print(f"{status_color}{health_symbol} HTTP {result['status_code']}: {result['response_time_ms']}ms{Fore.RESET}")
+            https_handler = urllib.request.HTTPSHandler(context=context)
+            opener = urllib.request.build_opener(https_handler)
+            with opener.open(req, timeout=timeout) as response:
+                end_time = time.time()
+                result["response_time_ms"] = round((end_time - start_time) * 1000, 2)
+                result["status_code"] = response.getcode()
                 
-                if not result["healthy"]:
-                    print(f"{Fore.YELLOW}  Expected {expected_status}, got {result['status_code']}{Fore.RESET}")
+                # Store headers
+                result["headers"] = dict(response.headers)
+                
+                # Read a small amount of content for preview
+                try:
+                    content = response.read(500)  # First 500 bytes
+                    if content:
+                        result["content_preview"] = content.decode('utf-8', errors='ignore')[:200]
+                except Exception:
+                    pass
+                
+                result["healthy"] = result["status_code"] == expected_status
+                result["success"] = True
+                
+                if not silent:
+                    status_color = Fore.GREEN if result["healthy"] else Fore.YELLOW
+                    health_symbol = "✓" if result["healthy"] else "⚠"
+                    print(f"{status_color}{health_symbol} HTTP {result['status_code']}: {result['response_time_ms']}ms{Fore.RESET}")
+                    
+                    if not result["healthy"]:
+                        print(f"{Fore.YELLOW}  Expected {expected_status}, got {result['status_code']}{Fore.RESET}")
+        else:
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                end_time = time.time()
+                result["response_time_ms"] = round((end_time - start_time) * 1000, 2)
+                result["status_code"] = response.getcode()
+                
+                # Store headers
+                result["headers"] = dict(response.headers)
+                
+                # Read a small amount of content for preview
+                try:
+                    content = response.read(500)  # First 500 bytes
+                    if content:
+                        result["content_preview"] = content.decode('utf-8', errors='ignore')[:200]
+                except Exception:
+                    pass
+                
+                result["healthy"] = result["status_code"] == expected_status
+                result["success"] = True
+                
+                if not silent:
+                    status_color = Fore.GREEN if result["healthy"] else Fore.YELLOW
+                    health_symbol = "✓" if result["healthy"] else "⚠"
+                    print(f"{status_color}{health_symbol} HTTP {result['status_code']}: {result['response_time_ms']}ms{Fore.RESET}")
+                    
+                    if not result["healthy"]:
+                        print(f"{Fore.YELLOW}  Expected {expected_status}, got {result['status_code']}{Fore.RESET}")
     
     except urllib.error.HTTPError as e:
         result["status_code"] = e.code
@@ -383,11 +473,31 @@ def check_multiple_endpoints(urls: List[str], timeout: int = 10, silent: bool = 
     
     result["success"] = result["successful_endpoints"] > 0
     
+    # Add error message when all endpoints fail
+    if result["successful_endpoints"] == 0:
+        # Collect error types from failed endpoints
+        error_types = []
+        for url, endpoint_result in result["results"].items():
+            if "error" in endpoint_result:
+                error_types.append(endpoint_result["error"])
+        
+        if error_types:
+            # Get unique error types
+            unique_errors = list(set(error_types))
+            if len(unique_errors) == 1:
+                result["error_message"] = f"All endpoints failed: {unique_errors[0]}"
+            else:
+                result["error_message"] = f"All {result['total_endpoints']} endpoints failed with various errors"
+        else:
+            result["error_message"] = f"All {result['total_endpoints']} endpoints failed to respond"
+    
     if not silent:
         success_rate = (result["successful_endpoints"] / result["total_endpoints"]) * 100
         print(f"{Fore.CYAN}Results: {result['successful_endpoints']}/{result['total_endpoints']} successful ({success_rate:.1f}%){Fore.RESET}")
         if result["average_response_time"]:
             print(f"{Fore.CYAN}Average response time: {result['average_response_time']}ms{Fore.RESET}")
+        elif result["successful_endpoints"] == 0:
+            print(f"{Fore.RED}Error: {result.get('error_message', 'All endpoints failed')}{Fore.RESET}")
     
     return result
 
@@ -513,9 +623,9 @@ def check_website_accessibility(domain: str, check_subdomains: bool = True, sile
         print(f"  {Fore.GREEN if result['ssl_valid'] else Fore.RED}{ssl_status} SSL certificate valid{Fore.RESET}")
         
         if result["redirects_to_https"]:
-            print(f"  {Fore.GREEN}✓ HTTP redirects to HTTPS{Fore.RESET}")
+            print(f"  {Fore.GREEN} HTTP redirects to HTTPS{Fore.RESET}")
         
         if result["accessible_subdomains"]:
-            print(f"  {Fore.GREEN}✓ Accessible subdomains: {', '.join(result['accessible_subdomains'])}{Fore.RESET}")
+            print(f"  {Fore.GREEN} Accessible subdomains: {', '.join(result['accessible_subdomains'])}{Fore.RESET}")
     
     return result

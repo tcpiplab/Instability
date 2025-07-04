@@ -13,3 +13,9 @@ memory/session_cache.json
 /semgrep_results*.sarif
 /.vscode/
 /.claude/
+
+# Environment variables
+.env
+/debug.log
+/docs/Instability Chatbot MCP Server Implementation Plan.pdf
+/docs/mcp-implementation-plan.md

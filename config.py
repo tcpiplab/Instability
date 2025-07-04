@@ -36,6 +36,11 @@ TRACEROUTE_TIMEOUT = 30
 # Tool detection settings
 TOOL_DETECTION_TIMEOUT = 5
 
+# MCP server authentication settings
+MCP_AUTH_ENABLED = os.getenv("MCP_AUTH_ENABLED", "true").lower() == "true"
+MCP_API_KEY = os.getenv("MCP_API_KEY", "")
+MCP_AUTH_HEADER = "X-API-Key"
+
 # Cross-platform tool paths for detection
 # The system will check these paths in order and use the first found
 TOOL_PATHS: Dict[str, List[str]] = {

@@ -258,7 +258,7 @@ def ping_host(target: str, count: int = 4, timeout: int = 5, silent: bool = Fals
 
 def traceroute_host(target: str, max_hops: int = 30, timeout: int = 30, silent: bool = False) -> Dict[str, Any]:
     """
-    Trace the route to a host.
+    Trace the route to a host using the traceroute command if available on maOS or Linux or use tracert on Windows.
     
     Args:
         target: Host to trace route to (IP or hostname)
@@ -296,10 +296,9 @@ def traceroute_host(target: str, max_hops: int = 30, timeout: int = 30, silent: 
         if not silent:
             if success:
                 print(f"Traceroute to {target}: {len(parsed_data['hops'])} hops")
-                for hop in parsed_data["hops"][:5]:  # Show first 5 hops
-                    print(f"  {hop['hop_number']}: {hop['ip']} ({hop['hostname']}) {hop['avg_time']:.1f}ms")
-                if len(parsed_data["hops"]) > 5:
-                    print(f"  ... and {len(parsed_data['hops']) - 5} more hops")
+                for hop in parsed_data["hops"]:  # Show all hops
+                    hostname_display = hop['hostname'] if hop['hostname'] else hop['ip']
+                    print(f"  {hop['hop_number']}: {hop['ip']} ({hostname_display}) {hop['avg_time']:.1f}ms")
             else:
                 print(f"Traceroute to {target}: Failed")
         
@@ -742,6 +741,95 @@ def test_layer3_diagnostics():
                 print(f"Data keys: {list(result['parsed_data'].keys())}")
         except Exception as e:
             print(f"Error: {Fore.RED}{e}{Style.RESET_ALL}")
+
+
+def get_module_tools():
+    """Get tool metadata for functions in this module."""
+    from core.tools_registry import ToolMetadata, ParameterInfo, ParameterType, ToolCategory
+    
+    return {
+        "get_external_ip": ToolMetadata(
+            name="get_external_ip",
+            function_name="get_external_ip",
+            module_path="network.layer3_diagnostics",
+            description="Get the external/public IP address",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={
+                "timeout": ParameterInfo(ParameterType.INTEGER, default=10, description="Timeout in seconds for the request"),
+                "silent": ParameterInfo(ParameterType.BOOLEAN, default=False, description="If True, suppress output except errors")
+            },
+            modes=["manual", "chatbot"],
+            examples=["get_external_ip", "get_external_ip timeout=5"],
+            function_ref=get_external_ip
+        ),
+        "ping_host": ToolMetadata(
+            name="ping_host",
+            function_name="ping_host",
+            module_path="network.layer3_diagnostics",
+            description="Ping a host to test connectivity and measure latency",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={
+                "target": ParameterInfo(ParameterType.STRING, required=True, description="Host to ping (IP or hostname)"),
+                "count": ParameterInfo(ParameterType.INTEGER, default=4, description="Number of ping packets to send"),
+                "timeout": ParameterInfo(ParameterType.INTEGER, default=10, description="Timeout in seconds for the entire operation"),
+                "silent": ParameterInfo(ParameterType.BOOLEAN, default=False, description="If True, suppress output except errors")
+            },
+            modes=["manual", "chatbot"],
+            aliases=["ping"],
+            examples=["ping_host google.com", "ping_host 8.8.8.8 count=2"],
+            function_ref=ping_host
+        ),
+        "traceroute_host": ToolMetadata(
+            name="traceroute_host",
+            function_name="traceroute_host",
+            module_path="network.layer3_diagnostics",
+            description="Trace the route to a host",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={
+                "target": ParameterInfo(ParameterType.STRING, required=True, description="Host to trace route to (IP or hostname)"),
+                "max_hops": ParameterInfo(ParameterType.INTEGER, default=30, description="Maximum number of hops"),
+                "timeout": ParameterInfo(ParameterType.INTEGER, default=30, description="Timeout in seconds for the entire operation"),
+                "silent": ParameterInfo(ParameterType.BOOLEAN, default=False, description="If True, suppress output except errors")
+            },
+            modes=["manual", "chatbot"],
+            aliases=["traceroute", "tracert"],
+            examples=["traceroute_host google.com", "traceroute_host www.tcpiplab.com max_hops=15"],
+            function_ref=traceroute_host
+        ),
+        "test_port_connectivity": ToolMetadata(
+            name="test_port_connectivity",
+            function_name="test_port_connectivity",
+            module_path="network.layer3_diagnostics",
+            description="Test connectivity to a specific port on a host",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={
+                "target": ParameterInfo(ParameterType.STRING, required=True, description="Host to test (IP or hostname)"),
+                "port": ParameterInfo(ParameterType.INTEGER, required=True, description="Port number to test"),
+                "timeout": ParameterInfo(ParameterType.INTEGER, default=5, description="Timeout in seconds for connection attempt"),
+                "silent": ParameterInfo(ParameterType.BOOLEAN, default=False, description="If True, suppress output except errors")
+            },
+            modes=["manual", "chatbot"],
+            aliases=["test_port", "port_test"],
+            examples=["test_port_connectivity google.com 80", "test_port_connectivity 192.168.1.1 22"],
+            function_ref=test_port_connectivity
+        ),
+        "scan_local_network": ToolMetadata(
+            name="scan_local_network",
+            function_name="scan_local_network",
+            module_path="network.layer3_diagnostics",
+            description="Perform a basic ping sweep of the local network",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={
+                "network": ParameterInfo(ParameterType.STRING, default=None, description="Network to scan (e.g., '192.168.1.0/24'), auto-detected if None"),
+                "timeout": ParameterInfo(ParameterType.INTEGER, default=10, description="Timeout per ping in seconds"),
+                "silent": ParameterInfo(ParameterType.BOOLEAN, default=False, description="If True, suppress output except errors")
+            },
+            modes=["manual", "chatbot"],
+            aliases=["network_scan", "ping_sweep"],
+            examples=["scan_local_network", "scan_local_network network=192.168.1.0/24"],
+            function_ref=scan_local_network
+        )
+    }
 
 
 if __name__ == "__main__":

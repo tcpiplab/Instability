@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "instability-chatbot": {
+      "command": "python",
+      "args": ["/path/to/instability/mcp_server.py"],
+      "env": {
+        "MCP_AUTH_ENABLED": "true",
+        "MCP_API_KEY": "your-generated-api-key-here"
+      }
+    }
+  }
+}

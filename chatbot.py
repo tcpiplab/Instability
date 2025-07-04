@@ -55,9 +55,8 @@ except ImportError:
 # Local imports
 try:
     from core.tools_registry import get_tool_registry
-    from network_diagnostics import get_available_tools  # Legacy fallback for tool listing
 except ImportError:
-    print(f"{Fore.RED}Error: Tool registry or network diagnostics module not found.{Style.RESET_ALL}")
+    print(f"{Fore.RED}Error: Tool registry module not found.{Style.RESET_ALL}")
     sys.exit(1)
 
 # Configuration
@@ -72,6 +71,43 @@ ASSISTANT_COLOR = Fore.BLUE
 TOOL_COLOR = Fore.GREEN
 ERROR_COLOR = Fore.RED
 THINKING_COLOR = Style.DIM
+
+
+# V3 Tools Registry Integration
+def get_available_tools() -> Dict[str, Any]:
+    """Get available tools from v3 registry with legacy compatibility"""
+    try:
+        registry = get_tool_registry()
+        registry.auto_discover_tools()  # Ensure all tools are discovered
+        registry.integrate_external_tools()  # Include external tools
+        
+        # Get tools in a format compatible with the legacy interface
+        available_tools = {}
+        all_tools = registry.get_available_tools(mode="chatbot")
+        
+        for tool_name, metadata in all_tools.items():
+            # Create a mock function object with the docstring for compatibility
+            class MockFunction:
+                def __init__(self, description):
+                    self.__doc__ = description
+                    self.__name__ = tool_name
+                
+                def __call__(self, *args, **kwargs):
+                    # This should never be called directly - registry handles execution
+                    return registry.execute_tool(tool_name, kwargs, mode="chatbot")
+            
+            available_tools[tool_name] = MockFunction(metadata.description)
+        
+        return available_tools
+        
+    except Exception as e:
+        print_error(f"Error getting tools from v3 registry: {e}")
+        # Fallback to legacy system if available
+        try:
+            from network_diagnostics import get_available_tools as legacy_get_tools
+            return legacy_get_tools()
+        except ImportError:
+            return {}
 
 
 # Command completion setup
@@ -498,6 +534,14 @@ When you need specific information, you can call a tool using this format:
 TOOL: tool_name
 ARGS: {{"arg_name": "value"}} (or {{}} if no arguments needed)
 
+Examples:
+- TOOL: ping_target
+  ARGS: {{"target": "google.com"}}
+- TOOL: traceroute_host  
+  ARGS: {{"target": "www.tcpiplab.com"}}
+- TOOL: get_external_ip
+  ARGS: {{}}
+
 STOP after the tool call. Do NOT include any text like "Tool result:", example output, or sample data. The system will execute the tool and provide the real result.
 
 CONTEXT AWARENESS: When users ask about "we", "our machine", "this system", or "localhost", they mean the LOCAL machine you're running on. When they specify IP addresses or hostnames, they mean REMOTE targets.
@@ -513,7 +557,9 @@ Examples of when you MUST use tools:
 - General connectivity → use check_internet_connection or check_local_network
 - NAT questions (Are we behind NAT? Are we using NAT? NAT status?) → ALWAYS use check_nat_status
 - Speed or bandwidth questions → use run_speed_test
+- Questions about Ollama status (is ollama running? ollama connectivity?) → use check_ollama_connectivity
 - Questions about the local operating system (this machine, localhost) → use get_os_info
+- Traceroute questions (run traceroute, trace route to host) → use traceroute_host
 - Port scanning or service detection on remote hosts → use nmap_scan, quick_port_scan, service_version_scan
 - Network discovery or host discovery on remote networks → use network_discovery
 - OS fingerprinting of remote hosts/targets → use os_detection_scan

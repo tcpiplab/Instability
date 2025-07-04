@@ -8,6 +8,7 @@ consistent metadata, and unified execution interface.
 import importlib
 import inspect
 import os
+import re
 from dataclasses import dataclass, field
 from types import ModuleType
 from typing import Dict, Any, List, Optional, Callable, Union
@@ -129,8 +130,7 @@ class ToolRegistry:
                 module = importlib.import_module(metadata.module_path)
                 metadata.function_ref = getattr(module, metadata.function_name)
             except (ImportError, AttributeError) as e:
-                print(f"Warning: Could not load function {metadata.function_name} from {metadata.module_path}: {e}")
-                metadata.function_ref = None
+                metadata.function_ref = None  # Silently set to None for failed imports
         
         # Register tool
         self._tools[metadata.name] = metadata
@@ -173,8 +173,39 @@ class ToolRegistry:
             
             # Fallback: scan for functions with proper signatures
             discovered = {}
+            excluded_functions = {
+                'get_tool_registry',
+                # Error handling utilities
+                'create_error_response', 'create_input_error', 'create_network_error', 
+                'create_system_error', 'create_execution_error',
+                # Parsing utilities
+                'parse_ping_output', 'parse_traceroute_output', 'parse_unix_interface_ip',
+                'parse_unix_interfaces', 'parse_windows_interface_ip', 'parse_windows_interfaces',
+                'parse_version_output', 'parse_network_state_markdown', 'parse_target_scope_markdown',
+                # Validation utilities
+                'is_valid_ip', 'get_timeout',
+                # Cache/memory utilities
+                'cache_tool_result', 'get_cached_result', 'load_session_cache', 'save_session_cache',
+                'load_tool_inventory_cache', 'save_tool_inventory_cache',
+                # Formatting utilities
+                'format_tool_inventory_summary', 'format_targets_section', 'update_markdown_sections',
+                # Test functions
+                'test_layer2_diagnostics', 'test_layer3_diagnostics', 'test_tool_detector', 'test_memory_manager',
+                # Standard library functions
+                'dataclass', 'field',
+                # Internal tool detector utilities
+                'colorama_init', 'check_predefined_paths', 'check_tool_in_path', 'detect_tool_installation',
+                'get_platform_install_command', 'get_tool_version', 'print_tool_recommendations',
+                'get_available_tools', 'get_missing_tools', 'get_tools_by_category',
+                # Memory management functions that are too low-level for direct use
+                'create_default_network_state', 'create_default_target_scope', 'create_empty_session_cache',
+                'get_memory_dir', 'initialize_memory_files', 'read_network_state', 'read_target_scope',
+                'update_network_state', 'update_target_scope',
+                # Low-level utilities that should be wrapped by higher-level tools
+                'get_hostname_for_ip', 'detect_local_network'
+            }
             for name, obj in inspect.getmembers(module, inspect.isfunction):
-                if name.startswith('_'):
+                if name.startswith('_') or name in excluded_functions:
                     continue
                 
                 # Create basic metadata from function
@@ -217,8 +248,7 @@ class ToolRegistry:
             return discovered
             
         except ImportError as e:
-            print(f"Warning: Could not import module {module_path}: {e}")
-            return {}
+            return {}  # Silently return empty dict for failed imports
     
     def auto_discover_tools(self) -> None:
         """
@@ -241,7 +271,7 @@ class ToolRegistry:
                             self.discover_module_tools(module_path)
                         
             except (ImportError, FileNotFoundError, AttributeError) as e:
-                print(f"Warning: Could not discover tools in {base_path}: {e}")
+                pass  # Silently skip missing modules during auto-discovery
         
         # Discover additional standalone modules
         for module_path in self._additional_modules:
@@ -250,7 +280,7 @@ class ToolRegistry:
                 if self._is_safe_module_path(module_path):
                     self.discover_module_tools(module_path)
             except Exception as e:
-                print(f"Warning: Could not discover tools in {module_path}: {e}")
+                pass  # Silently skip modules that can't be imported
 
 
     def integrate_external_tools(self) -> None:
@@ -258,8 +288,14 @@ class ToolRegistry:
         Integrate external tool detection with registry.
         """
         try:
-            from pentest.tool_detector import scan_for_tools
-            external_tools_inventory = scan_for_tools()
+            # Suppress stdout during tool detection to prevent MCP interference
+            import contextlib
+            import io
+            
+            with contextlib.redirect_stdout(io.StringIO()):
+                from pentest.tool_detector import scan_for_tools
+                external_tools_inventory = scan_for_tools()
+            
             # Extract the tools dictionary from the inventory structure
             self._external_tools = external_tools_inventory.get("tools", {})
             
@@ -269,7 +305,7 @@ class ToolRegistry:
                     # Create metadata for external tool
                     metadata = ToolMetadata(
                         name=tool_name,
-                        function_name=f"run_{tool_name}",
+                        function_name=f"run_{tool_name}_scan",
                         module_path=f"pentest.{tool_name}_wrapper",
                         description=f"External {tool_name} tool",
                         category=ToolCategory.PENTESTING,
@@ -294,7 +330,7 @@ class ToolRegistry:
                         pass
                         
         except ImportError:
-            print("Warning: Tool detector not available")
+            pass  # Silently skip if tool detector not available
     
     def get_tool(self, name: str) -> Optional[ToolMetadata]:
         """
@@ -434,7 +470,19 @@ class ToolRegistry:
         # Execute tool
         if metadata.function_ref:
             try:
+                # Check if running in MCP mode - only force silent mode
+                if os.environ.get('MCP_MODE') == '1':
+                    # Force silent mode for MCP to prevent Claude Desktop crashes
+                    if 'silent' in metadata.parameters:
+                        filtered_parameters['silent'] = True
+                
+                # Execute tool normally - let MCP server handle stdout suppression
                 result = metadata.function_ref(**filtered_parameters)
+                
+                # Sanitize output for MCP compatibility
+                if os.environ.get('MCP_MODE') == '1':
+                    result = self._sanitize_for_mcp(result)
+                
                 return result
             except Exception as e:
                 return create_error_response(
@@ -450,6 +498,50 @@ class ToolRegistry:
                 f"Tool function not available",
                 tool_name=tool_name
             )
+    
+    def _sanitize_for_mcp(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Clean tool output for MCP compatibility by removing terminal colors
+        and ensuring JSON-serializable content.
+        
+        Args:
+            result: Tool result dictionary
+            
+        Returns:
+            Sanitized result dictionary
+        """
+        if not isinstance(result, dict):
+            return result
+        
+        sanitized = {}
+        for key, value in result.items():
+            if isinstance(value, str):
+                # Strip ANSI color codes and control characters
+                clean_value = re.sub(r'\x1b\[[0-9;]*[mK]', '', value)
+                # Remove any remaining control characters except newlines/tabs
+                clean_value = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', clean_value)
+                sanitized[key] = clean_value
+            elif isinstance(value, dict):
+                # Recursively sanitize nested dictionaries
+                sanitized[key] = self._sanitize_for_mcp(value)
+            elif isinstance(value, list):
+                # Sanitize list elements
+                sanitized_list = []
+                for item in value:
+                    if isinstance(item, dict):
+                        sanitized_list.append(self._sanitize_for_mcp(item))
+                    elif isinstance(item, str):
+                        clean_item = re.sub(r'\x1b\[[0-9;]*[mK]', '', item)
+                        clean_item = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', clean_item)
+                        sanitized_list.append(clean_item)
+                    else:
+                        sanitized_list.append(item)
+                sanitized[key] = sanitized_list
+            else:
+                # Keep other types as-is (numbers, booleans, None)
+                sanitized[key] = value
+        
+        return sanitized
     
     def get_tool_help(self, tool_name: str) -> Optional[str]:
         """

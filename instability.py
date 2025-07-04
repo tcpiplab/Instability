@@ -354,7 +354,7 @@ def _run_basic_test_mode():
 def main():
     """Main entry point for instability.py"""
     parser = argparse.ArgumentParser(description="Network diagnostic chatbot")
-    parser.add_argument('mode', nargs='?', choices=['chatbot', 'manual', 'test', 'run-tests', 'help'],
+    parser.add_argument('mode', nargs='?', choices=['chatbot', 'manual', 'test', 'run-tests', 'mcp', 'help'],
                         default='help', help='Mode of operation')
     parser.add_argument('tool_name', nargs='?', help='Specific tool to run in manual mode')
     parser.add_argument('--model', '-m', type=str, default='dolphin3',
@@ -373,6 +373,11 @@ def main():
         return None
     elif args.mode == 'run-tests':
         return run_tests_mode()
+    elif args.mode == 'mcp':
+        # Run as MCP server
+        import subprocess
+        subprocess.run([sys.executable, "mcp_server.py"])
+        return None
     elif args.mode == 'help':
         show_help()
         return None
