@@ -234,13 +234,30 @@ class InstabilityChatbotMCPServer(Server):
             import contextlib
             import io
             
-            with contextlib.redirect_stdout(io.StringIO()):
+            # Capture stdout during tool execution to prevent MCP JSON protocol interference
+            stdout_capture = io.StringIO()
+            stderr_capture = io.StringIO()
+            
+            with contextlib.redirect_stdout(stdout_capture), \
+                 contextlib.redirect_stderr(stderr_capture):
                 # Force silent=True for MCP executions to prevent stdout interference
                 arguments = arguments.copy()
                 arguments["silent"] = True
                 
                 # Execute tool using registry
                 result = self.tool_registry.execute_tool(tool_name, arguments, mode="chatbot")
+                
+            # Capture any stdout/stderr that might contain useful debug info
+            captured_stdout = stdout_capture.getvalue()
+            captured_stderr = stderr_capture.getvalue()
+            
+            # If the result indicates failure but has no error details, include captured output
+            if isinstance(result, dict) and not result.get("success"):
+                if not result.get("error_message") and not result.get("stderr"):
+                    if captured_stderr:
+                        result["stderr"] = captured_stderr
+                    elif captured_stdout:
+                        result["stderr"] = captured_stdout
             
             if isinstance(result, dict):
                 if result.get("success"):
@@ -261,8 +278,29 @@ class InstabilityChatbotMCPServer(Server):
                             sanitized_fallback = self._sanitize_text_content(str(result['parsed_data']))
                             result_text += f"**Data-** {sanitized_fallback}"
                 else:
-                    sanitized_error = self._sanitize_text_content(result.get('error_message', 'Unknown error'))
-                    result_text = f"**Tool-** {tool_name}\n**Error-** {sanitized_error}"
+                    # Provide more detailed error information
+                    error_message = result.get('error_message', 'No error message provided')
+                    error_type = result.get('error_type', 'unknown')
+                    stderr = result.get('stderr', '')
+                    exit_code = result.get('exit_code', 'unknown')
+                    
+                    # Build comprehensive error details
+                    error_details = []
+                    if error_message and error_message != 'No error message provided':
+                        error_details.append(f"Message - {self._sanitize_text_content(error_message)}")
+                    if error_type and error_type != 'unknown':
+                        error_details.append(f"Type - {error_type}")
+                    if stderr:
+                        error_details.append(f"Details - {self._sanitize_text_content(stderr)}")
+                    if exit_code != 'unknown':
+                        error_details.append(f"Exit Code - {exit_code}")
+                    
+                    if error_details:
+                        detailed_error = "\n".join(error_details)
+                    else:
+                        detailed_error = "Tool failed without providing error details"
+                        
+                    result_text = f"**Tool-** {tool_name}\n**Error-**\n{detailed_error}"
             else:
                 sanitized_result = self._sanitize_text_content(str(result))
                 result_text = f"**Tool-** {tool_name}\n**Result-** {sanitized_result}"

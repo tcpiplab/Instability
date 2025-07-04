@@ -117,7 +117,7 @@ def test_http_connectivity(url: str, timeout: int = 10, follow_redirects: bool =
                 result["success"] = True
                 
                 if not silent:
-                    print(f"{Fore.GREEN}✓ HTTP {result['status_code']}: {result['response_time_ms']}ms{Fore.RESET}")
+                    print(f"{Fore.GREEN} HTTP {result['status_code']}: {result['response_time_ms']}ms{Fore.RESET}")
                     if result["redirect_count"] > 0:
                         print(f"{Fore.YELLOW}  → Redirected to: {result['final_url']}{Fore.RESET}")
         else:
@@ -145,7 +145,7 @@ def test_http_connectivity(url: str, timeout: int = 10, follow_redirects: bool =
                 result["success"] = True
                 
                 if not silent:
-                    print(f"{Fore.GREEN}✓ HTTP {result['status_code']}: {result['response_time_ms']}ms{Fore.RESET}")
+                    print(f"{Fore.GREEN} HTTP {result['status_code']}: {result['response_time_ms']}ms{Fore.RESET}")
                     if result["redirect_count"] > 0:
                         print(f"{Fore.YELLOW}  → Redirected to: {result['final_url']}{Fore.RESET}")
     
@@ -623,9 +623,9 @@ def check_website_accessibility(domain: str, check_subdomains: bool = True, sile
         print(f"  {Fore.GREEN if result['ssl_valid'] else Fore.RED}{ssl_status} SSL certificate valid{Fore.RESET}")
         
         if result["redirects_to_https"]:
-            print(f"  {Fore.GREEN}✓ HTTP redirects to HTTPS{Fore.RESET}")
+            print(f"  {Fore.GREEN} HTTP redirects to HTTPS{Fore.RESET}")
         
         if result["accessible_subdomains"]:
-            print(f"  {Fore.GREEN}✓ Accessible subdomains: {', '.join(result['accessible_subdomains'])}{Fore.RESET}")
+            print(f"  {Fore.GREEN} Accessible subdomains: {', '.join(result['accessible_subdomains'])}{Fore.RESET}")
     
     return result

@@ -470,21 +470,14 @@ class ToolRegistry:
         # Execute tool
         if metadata.function_ref:
             try:
-                # Check if running in MCP mode - suppress output to prevent UI crashes
+                # Check if running in MCP mode - only force silent mode
                 if os.environ.get('MCP_MODE') == '1':
                     # Force silent mode for MCP to prevent Claude Desktop crashes
                     if 'silent' in metadata.parameters:
                         filtered_parameters['silent'] = True
-                    
-                    # Suppress ALL stdout/stderr during tool execution in MCP mode
-                    import contextlib
-                    import io
-                    
-                    with contextlib.redirect_stdout(io.StringIO()), \
-                         contextlib.redirect_stderr(io.StringIO()):
-                        result = metadata.function_ref(**filtered_parameters)
-                else:
-                    result = metadata.function_ref(**filtered_parameters)
+                
+                # Execute tool normally - let MCP server handle stdout suppression
+                result = metadata.function_ref(**filtered_parameters)
                 
                 # Sanitize output for MCP compatibility
                 if os.environ.get('MCP_MODE') == '1':
