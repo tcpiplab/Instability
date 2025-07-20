@@ -560,8 +560,10 @@ Examples of when you MUST use tools:
 - Questions about Ollama status (is ollama running? ollama connectivity?) → use check_ollama_connectivity
 - Questions about the local operating system (this machine, localhost) → use get_os_info
 - Traceroute questions (run traceroute, trace route to host) → use traceroute_host
-- Port scanning or service detection on remote hosts → use nmap_scan, quick_port_scan, service_version_scan
+- Port scanning on remote hosts → use nmap_scan, quick_port_scan
+- Service detection or version detection scans → use service_version_scan (NOT nmap_scan)
 - Network discovery or host discovery on remote networks → use network_discovery
+- Scanning "local network" → first get_local_ip, then derive the CIDR network mask (e.g., if local IP is 192.168.1.100 and the local network mask is /24, then scan 192.168.1.0/24)
 - OS fingerprinting of remote hosts/targets → use os_detection_scan
 - Comprehensive security scanning → use comprehensive_scan
 
