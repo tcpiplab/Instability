@@ -310,23 +310,34 @@ class InstabilityChatbotMCPServer(Server):
                     stderr = result.get('stderr', '')
                     exit_code = result.get('exit_code', 'unknown')
                     
-                    # Build comprehensive error details
-                    error_details = []
-                    if error_message and error_message != 'No error message provided':
-                        error_details.append(f"Message - {self._sanitize_text_content(error_message)}")
-                    if error_type and error_type != 'unknown':
-                        error_details.append(f"Type - {error_type}")
-                    if stderr:
-                        error_details.append(f"Details - {self._sanitize_text_content(stderr)}")
-                    if exit_code != 'unknown':
-                        error_details.append(f"Exit Code - {exit_code}")
-                    
-                    if error_details:
-                        detailed_error = "\n".join(error_details)
+                    # Check if this is a security restriction with rich markdown commands
+                    if (result.get('error_type') == 'security_restriction' and 
+                        'manual_commands_markdown' in result):
+                        # Display rich markdown manual commands for security restrictions
+                        manual_commands = result['manual_commands_markdown']
+                        result_text = f"**Tool-** {tool_name}\n**Security Restriction Detected**\n\n{manual_commands}"
                     else:
-                        detailed_error = "Tool failed without providing error details"
+                        # Build comprehensive error details for other errors
+                        error_details = []
+                        if error_message and error_message != 'No error message provided':
+                            error_details.append(f"Message - {self._sanitize_text_content(error_message)}")
+                        if error_type and error_type != 'unknown':
+                            error_details.append(f"Type - {error_type}")
+                        if stderr:
+                            error_details.append(f"Details - {self._sanitize_text_content(stderr)}")
+                        if exit_code != 'unknown':
+                            error_details.append(f"Exit Code - {exit_code}")
                         
-                    result_text = f"**Tool-** {tool_name}\n**Error-**\n{detailed_error}"
+                        if error_details:
+                            detailed_error = "\n".join(error_details)
+                        else:
+                            detailed_error = "Tool failed without providing error details"
+                            
+                        result_text = f"**Tool-** {tool_name}\n**Error-**\n{detailed_error}"
+                        
+                        # If there are manual commands available, add them too
+                        if 'manual_commands_markdown' in result:
+                            result_text += f"\n\n{result['manual_commands_markdown']}"
             else:
                 sanitized_result = self._sanitize_text_content(str(result))
                 result_text = f"**Tool-** {tool_name}\n**Result-** {sanitized_result}"
