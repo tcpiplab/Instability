@@ -286,13 +286,7 @@ The tool will automatically be discovered and available in both chatbot and manu
 
 ## TODO
 
-- Add a `/think` command to allow the user to tell the chatbot to think about a problem before responding or calling 
-  any tools.
-- Add tool to make sure nmap can scan the local network
 - Add IP address geolocation lookup tool
-- Add tool for checking local CIDR mask and save to memory
-- Add tools for checking local IP default gateway IP address and save to memory
-- Add tool for looking up local MAC address and save to memory
 - Add tool for displaying ARP table
 - Add MAC address manufacturer lookup tool (using hardcoded/pre-downloaded list for offline operation)
 

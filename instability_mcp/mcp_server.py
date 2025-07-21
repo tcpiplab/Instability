@@ -292,6 +292,10 @@ class InstabilityChatbotMCPServer(Server):
                         # Sanitize stdout content to prevent colon-related UI crashes
                         sanitized_stdout = self._sanitize_text_content(result['stdout'])
                         result_text += f"**Output-**\n```\n{sanitized_stdout}\n```"
+                    elif "raw_output" in result and result["raw_output"]:
+                        # Handle nmap and other tools that return raw command output
+                        sanitized_output = self._sanitize_text_content(result['raw_output'])
+                        result_text += f"**Output-**\n```\n{sanitized_output}\n```"
                     elif "parsed_data" in result:
                         import json
                         try:
