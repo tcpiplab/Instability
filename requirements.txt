@@ -4,6 +4,7 @@ rich
 requests
 cryptography
 dnspython
+manuf
 # MCP server support
 mcp
 # Only needed for Windows to handle console input/output
