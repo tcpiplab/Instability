@@ -73,6 +73,7 @@ class ToolRegistry:
         self._external_tools: Dict[str, Any] = {}
         self._discovery_paths = [
             "network",
+            "network_tools",
             "pentest", 
             "memory",
             "core"
@@ -93,7 +94,7 @@ class ToolRegistry:
         """
         # Whitelist of allowed module paths/prefixes
         safe_prefixes = {
-                "network", "pentest", "memory", "core",
+                "network", "network_tools", "pentest", "memory", "core",
                 "network_diagnostics", "pentest.tool_detector"
                 }
 

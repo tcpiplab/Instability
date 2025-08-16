@@ -98,6 +98,7 @@ Available tools are organized into categories:
 - **Network Diagnostics**: ping, dns_check, web_check, network_scan
 - **Email Diagnostics**: smtp_connectivity, imap_connectivity, email_services
 - **IXP Monitoring**: ixp_connectivity, exchange_points
+- **IP Change Monitoring**: monitor_external_ip_changes, check_ip_change
 - **Pentesting**: nmap_scan, port_scan, host_discovery  
 - **System Info**: system_info, interface_status, tool_inventory
 
@@ -162,6 +163,7 @@ While using the chatbot, you can use these commands:
 ### Core Modules
 - `core/` - Enhanced chatbot, startup checks, memory manager, Ollama interface
 - `network/` - Layer 2/3 diagnostics, DNS testing, web connectivity, email diagnostics, IXP monitoring
+- `network_tools/` - External IP monitoring, MAC address lookup, and legacy network utilities
 - `pentest/` - Tool detection, nmap/nuclei/httpx wrappers, exploitation tools
 - `memory/` - Persistent markdown files (network_state.md, target_scope.md)
 - `utils/` - Terminal UI, markdown management, command parsing, output formatting
@@ -266,7 +268,7 @@ The tool will automatically be discovered and available in both chatbot and manu
 - **Manual tool execution** - All listed tools working  
 - **Chatbot integration** - v3 startup sequence integrated
 - **Tool inventory** - Detection of external pentesting tools
-- **Network diagnostics** - Layer 2/3, DNS, web connectivity, email infrastructure testing, IXP monitoring
+- **Network diagnostics** - Layer 2/3, DNS, web connectivity, email infrastructure testing, IXP monitoring, external IP change detection
 - **Basic pentesting tools** - nmap integration and wrappers
 - **Cross-platform support** - Windows, Linux, macOS compatibility
 - **Graceful degradation** - Functions without internet/Ollama
@@ -288,6 +290,7 @@ The tool will automatically be discovered and available in both chatbot and manu
 
 ## Recent Additions
 
+- **External IP Change Monitoring** - Tracks changes in external/public IP address with historical timestamps, storing current and previous IP data securely in user's config directory
 - **Email Diagnostics** - SMTP/IMAP connectivity testing for 9 major email providers (Gmail, Outlook, Yahoo, iCloud, AOL, Zoho, Mail.com, GMX, Fastmail)
 - **IXP Monitoring** - HTTP/HTTPS connectivity testing for 6 major internet exchange points (DE-CIX Frankfurt, LINX London, AMS-IX Amsterdam, NYIIX New York, HKIX Hong Kong, Equinix Global)
 - **MAC Address Manufacturer Lookup** - Offline MAC address manufacturer identification using Wireshark database
