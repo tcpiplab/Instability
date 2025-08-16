@@ -96,6 +96,7 @@ python instability.py manual [tool_name]
 
 Available tools are organized into categories:
 - **Network Diagnostics**: ping, dns_check, web_check, network_scan
+- **Email Diagnostics**: smtp_connectivity, imap_connectivity, email_services
 - **Pentesting**: nmap_scan, port_scan, host_discovery  
 - **System Info**: system_info, interface_status, tool_inventory
 
@@ -159,7 +160,7 @@ While using the chatbot, you can use these commands:
 
 ### Core Modules
 - `core/` - Enhanced chatbot, startup checks, memory manager, Ollama interface
-- `network/` - Layer 2/3 diagnostics, DNS testing, web connectivity
+- `network/` - Layer 2/3 diagnostics, DNS testing, web connectivity, email diagnostics
 - `pentest/` - Tool detection, nmap/nuclei/httpx wrappers, exploitation tools
 - `memory/` - Persistent markdown files (network_state.md, target_scope.md)
 - `utils/` - Terminal UI, markdown management, command parsing, output formatting
@@ -264,7 +265,7 @@ The tool will automatically be discovered and available in both chatbot and manu
 - **Manual tool execution** - All listed tools working  
 - **Chatbot integration** - v3 startup sequence integrated
 - **Tool inventory** - Detection of external pentesting tools
-- **Network diagnostics** - Layer 2/3, DNS, web connectivity testing
+- **Network diagnostics** - Layer 2/3, DNS, web connectivity, email infrastructure testing
 - **Basic pentesting tools** - nmap integration and wrappers
 - **Cross-platform support** - Windows, Linux, macOS compatibility
 - **Graceful degradation** - Functions without internet/Ollama
@@ -284,11 +285,15 @@ The tool will automatically be discovered and available in both chatbot and manu
 - Advanced target scope and engagement management
 - Web-based interface option
 
+## Recent Additions
+
+- **Email Diagnostics** - SMTP/IMAP connectivity testing for 9 major email providers (Gmail, Outlook, Yahoo, iCloud, AOL, Zoho, Mail.com, GMX, Fastmail)
+- **MAC Address Manufacturer Lookup** - Offline MAC address manufacturer identification using Wireshark database
+
 ## TODO
 
 - Add IP address geolocation lookup tool
 - Add tool for displaying ARP table
-- Add MAC address manufacturer lookup tool (using hardcoded/pre-downloaded list for offline operation)
 
 ## Troubleshooting
 
