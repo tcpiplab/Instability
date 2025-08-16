@@ -31,6 +31,7 @@ class ToolCategory(Enum):
     DNS = "dns"
     WEB = "web"
     SECURITY = "security"
+    EMAIL_DIAGNOSTICS = "email_diagnostics"
 
 @dataclass
 class ParameterInfo:
