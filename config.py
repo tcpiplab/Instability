@@ -535,6 +535,83 @@ def get_speed_category(speed_mbps: float) -> str:
     else:
         return "very_slow"
 
+# NTP Configuration
+NTP_DEFAULT_PORT = 123
+NTP_DEFAULT_TIMEOUT = 5
+NTP_DEFAULT_VERSION = 3
+NTP_SYNC_THRESHOLD_MS = 100
+NTP_MAX_PARALLEL_CHECKS = 10
+
+# Well-known NTP servers organized by category
+NTP_SERVERS = {
+    "global_pool": [
+        "pool.ntp.org",
+        "0.pool.ntp.org",
+        "1.pool.ntp.org", 
+        "2.pool.ntp.org",
+        "3.pool.ntp.org"
+    ],
+    "google": [
+        "time.google.com",
+        "time1.google.com",
+        "time2.google.com",
+        "time3.google.com",
+        "time4.google.com"
+    ],
+    "microsoft": ["time.windows.com"],
+    "apple": ["time.apple.com"],
+    "cloudflare": ["time.cloudflare.com"],
+    "nist": ["time.nist.gov"],
+    "usno": [
+        "tick.usno.navy.mil",
+        "tock.usno.navy.mil", 
+        "ntp2.usno.navy.mil"
+    ],
+    "regional": [
+        "ca.pool.ntp.org",
+        "us.pool.ntp.org", 
+        "europe.pool.ntp.org",
+        "time.euro.apple.com"
+    ]
+}
+
+# Flatten all servers for default testing
+NTP_DEFAULT_SERVERS = []
+for category in NTP_SERVERS.values():
+    NTP_DEFAULT_SERVERS.extend(category)
+
+def get_ntp_servers(category: str = None) -> List[str]:
+    """
+    Get list of NTP servers by category or all servers.
+    
+    Args:
+        category: Specific category of NTP servers (google, nist, usno, etc.) or None for all
+        
+    Returns:
+        List of NTP server hostnames
+    """
+    if category and category in NTP_SERVERS:
+        return NTP_SERVERS[category].copy()
+    return NTP_DEFAULT_SERVERS.copy()
+
+def get_ntp_timeout(operation: str = "basic") -> int:
+    """
+    Get timeout value for NTP operations.
+    
+    Args:
+        operation: Operation type (basic, batch, sync_analysis)
+        
+    Returns:
+        Timeout value in seconds
+    """
+    ntp_timeouts = {
+        "basic": NTP_DEFAULT_TIMEOUT,
+        "batch": NTP_DEFAULT_TIMEOUT * 2,
+        "sync_analysis": NTP_DEFAULT_TIMEOUT * 3,
+        "individual": NTP_DEFAULT_TIMEOUT
+    }
+    return ntp_timeouts.get(operation, NTP_DEFAULT_TIMEOUT)
+
 def get_whois_server(domain: str) -> str:
     """
     Get appropriate WHOIS server for a domain.

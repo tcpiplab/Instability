@@ -5,6 +5,7 @@ requests
 cryptography
 dnspython
 manuf
+ntplib
 # MCP server support
 mcp
 # Only needed for Windows to handle console input/output
