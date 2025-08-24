@@ -183,5 +183,42 @@ def main(silent: bool = False, polite: bool = False) -> str:
     return external_ip
 
 
+def get_module_tools():
+    """
+    Get tool metadata for external IP checking and reputation analysis registration.
+    
+    Returns:
+        Dictionary of tool metadata for tools registry integration
+    """
+    from core.tools_registry import ToolMetadata, ParameterInfo, ParameterType, ToolCategory
+    
+    return {
+        "check_ip_reputation": ToolMetadata(
+            name="check_ip_reputation",
+            function_name="main",
+            module_path="network_tools.check_external_ip",
+            description="Get external IP address and check reputation using AbuseIPDB (requires ABUSEIPDB_API_KEY env var)",
+            category=ToolCategory.NETWORK_DIAGNOSTICS,
+            parameters={
+                "silent": ParameterInfo(
+                    ParameterType.BOOLEAN,
+                    default=False,
+                    description="Suppress verbose console output"
+                ),
+                "polite": ParameterInfo(
+                    ParameterType.BOOLEAN,
+                    default=False,
+                    description="Use more polite language in output"
+                )
+            },
+            aliases=["external_ip_reputation", "ip_reputation", "get_external_ip"],
+            examples=[
+                "check_ip_reputation",
+                "check_ip_reputation --silent"
+            ]
+        )
+    }
+
+
 if __name__ == "__main__":
     main()
