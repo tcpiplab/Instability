@@ -99,6 +99,7 @@ Available tools are organized into categories:
 - **Email Diagnostics**: smtp_connectivity, imap_connectivity, email_services
 - **IXP Monitoring**: ixp_connectivity, exchange_points
 - **IP Change Monitoring**: monitor_external_ip_changes, check_ip_change
+- **IP Reputation**: check_ip_reputation (AbuseIPDB + Spamhaus blacklists)
 - **NTP Connectivity**: test_ntp_server, check_ntp_servers, analyze_ntp_sync
 - **Pentesting**: nmap_scan, port_scan, host_discovery  
 - **System Info**: system_info, interface_status, tool_inventory
@@ -293,6 +294,7 @@ The tool will automatically be discovered and available in both chatbot and manu
 
 - **NTP Connectivity Tools** - Comprehensive Network Time Protocol testing including individual server queries, batch server testing with concurrent execution, and time synchronization analysis across multiple servers with drift detection and quality assessment
 - **External IP Change Monitoring** - Tracks changes in external/public IP address with historical timestamps, storing current and previous IP data securely in user's config directory
+- **IP Reputation Analysis** - Comprehensive IP reputation checking using AbuseIPDB API and Spamhaus DNS-based blacklists (SBL, CSS, PBL) with severity classification
 - **Email Diagnostics** - SMTP/IMAP connectivity testing for 9 major email providers (Gmail, Outlook, Yahoo, iCloud, AOL, Zoho, Mail.com, GMX, Fastmail)
 - **IXP Monitoring** - HTTP/HTTPS connectivity testing for 6 major internet exchange points (DE-CIX Frankfurt, LINX London, AMS-IX Amsterdam, NYIIX New York, HKIX Hong Kong, Equinix Global)
 - **MAC Address Manufacturer Lookup** - Offline MAC address manufacturer identification using Wireshark database
