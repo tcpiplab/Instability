@@ -8,6 +8,7 @@ This module provides functionality to:
 
 import os
 import requests
+import socket
 import subprocess
 import json
 from typing import Dict, Any, Optional
@@ -138,16 +139,177 @@ def analyze_ip_reputation(reputation_data: Dict[str, Any]) -> str:
     return "\n".join(output)
 
 
-def main(silent: bool = False, polite: bool = False) -> str:
+def check_spamhaus_blacklists(ip: str) -> Dict[str, Dict[str, Any]]:
     """
-    Get the external IP address and check its reputation if an API key is available.
+    Check IP address against Spamhaus DNS-based blacklists.
     
     Args:
-        silent (bool): If True, suppress detailed output
+        ip (str): IP address to check (e.g., "192.168.1.1")
+        
+    Returns:
+        Dict[str, Dict[str, Any]]: Results for each blacklist with status and details
+        
+    Raises:
+        ValueError: If IP address format is invalid
+    """
+    # Validate IP address format
+    parts = ip.split('.')
+    if len(parts) != 4:
+        raise ValueError(f"Invalid IP address format: {ip}")
+    
+    try:
+        for part in parts:
+            num = int(part)
+            if not (0 <= num <= 255):
+                raise ValueError(f"Invalid IP address format: {ip}")
+    except ValueError:
+        raise ValueError(f"Invalid IP address format: {ip}")
+    
+    # Reverse IP address (1.2.3.4 -> 4.3.2.1)
+    reversed_ip = '.'.join(parts[::-1])
+    
+    # Define Spamhaus blacklists to check
+    blacklists = {
+        'sbl': 'sbl.spamhaus.org',
+        'css': 'css.spamhaus.org', 
+        'pbl': 'pbl.spamhaus.org'
+    }
+    
+    results = {}
+    
+    for list_name, domain in blacklists.items():
+        query_host = f"{reversed_ip}.{domain}"
+        
+        result_entry = {
+            'listed': False,
+            'query': query_host,
+            'response': None,
+            'error': None
+        }
+        
+        try:
+            # Perform DNS query - successful resolution means IP is listed
+            response = socket.gethostbyname(query_host)
+            result_entry['response'] = response
+            
+            # Interpret response codes based on list type
+            if list_name == 'pbl':
+                # PBL listings are informational for residential/dynamic IPs - not necessarily malicious
+                result_entry['listed'] = True
+                result_entry['severity'] = 'info'  # Informational, not critical
+            elif list_name in ['sbl', 'css']:
+                # SBL and CSS listings indicate spam sources - more serious
+                result_entry['listed'] = True
+                result_entry['severity'] = 'warning'  # Actual security concern
+            else:
+                result_entry['listed'] = True
+                result_entry['severity'] = 'warning'
+            
+        except socket.gaierror as e:
+            # DNS resolution failed - IP is clean (not listed)
+            result_entry['listed'] = False
+            result_entry['severity'] = 'clean'
+            result_entry['error'] = None  # This is expected for clean IPs
+            
+        except Exception as e:
+            # Unexpected error during DNS query
+            result_entry['listed'] = False
+            result_entry['severity'] = 'error'
+            result_entry['error'] = str(e)
+        
+        results[list_name] = result_entry
+    
+    return results
+
+
+def analyze_spamhaus_reputation(spamhaus_data: Dict[str, Dict[str, Any]]) -> str:
+    """
+    Format Spamhaus blacklist results for display.
+    
+    Args:
+        spamhaus_data (Dict[str, Dict[str, Any]]): Results from check_spamhaus_blacklists()
+        
+    Returns:
+        str: Formatted analysis of Spamhaus blacklist status
+    """
+    if not spamhaus_data:
+        return f"{Fore.YELLOW}No Spamhaus data available{Style.RESET_ALL}"
+    
+    output = [f"{Fore.CYAN}Spamhaus Blacklist Check:{Style.RESET_ALL}"]
+    
+    # Map blacklist names to human-readable descriptions
+    blacklist_names = {
+        'sbl': 'SBL (Spamhaus Block List)',
+        'css': 'CSS (Composite Spamhaus Source)', 
+        'pbl': 'PBL (Policy Block List)'
+    }
+    
+    warning_count = 0  # SBL/CSS listings (actual threats)
+    info_count = 0     # PBL listings (informational)
+    clean_count = 0    # Not listed
+    total_count = len(spamhaus_data)
+    
+    for list_name, result in spamhaus_data.items():
+        display_name = blacklist_names.get(list_name, list_name.upper())
+        
+        if result['error']:
+            # Unexpected error occurred
+            status_color = Fore.YELLOW
+            status_text = f"ERROR: {result['error']}"
+        elif result['listed']:
+            severity = result.get('severity', 'warning')
+            
+            if severity == 'warning':
+                # SBL/CSS listings - actual security concern
+                status_color = Fore.RED
+                status_text = f"LISTED - THREAT (Response: {result['response']})"
+                warning_count += 1
+            elif severity == 'info':
+                # PBL listing - informational (residential/dynamic IP)
+                status_color = Fore.YELLOW
+                status_text = f"LISTED - INFO (Response: {result['response']})"
+                info_count += 1
+            else:
+                status_color = Fore.RED
+                status_text = f"LISTED (Response: {result['response']})"
+                warning_count += 1
+        else:
+            # IP is clean
+            status_color = Fore.GREEN
+            status_text = "CLEAN"
+            clean_count += 1
+        
+        output.append(f"  {display_name}: {status_color}{status_text}{Style.RESET_ALL}")
+    
+    # Add summary based on severity
+    if warning_count > 0:
+        summary_color = Fore.RED
+        summary_text = f"WARNING: IP listed on {warning_count} threat blacklists (SBL/CSS)"
+    elif info_count > 0 and clean_count > 0:
+        summary_color = Fore.BLUE
+        summary_text = f"INFO: IP listed on PBL (normal for residential/dynamic IPs)"
+    elif clean_count == total_count:
+        summary_color = Fore.GREEN
+        summary_text = "IP appears clean - not listed on any Spamhaus blacklists"
+    else:
+        summary_color = Fore.YELLOW
+        summary_text = f"Mixed results: {info_count} informational, {warning_count} warnings"
+    
+    output.append(f"Summary: {summary_color}{summary_text}{Style.RESET_ALL}")
+    
+    return "\n".join(output)
+
+
+def main(silent: bool = False, polite: bool = False) -> str:
+    """
+    Get external IP and check reputation with AbuseIPDB and Spamhaus.
+    
+    Args:
+        silent (bool): If True, suppress detailed output  
         polite (bool): If True, use more polite language in output
         
     Returns:
-        str: The external IP address or detailed reputation if available
+        str: External IP with comprehensive reputation analysis
     """
     # Get the current external IP
     external_ip = get_public_ip()
@@ -159,28 +321,38 @@ def main(silent: bool = False, polite: bool = False) -> str:
     if not silent:
         print(f"{Fore.GREEN}External IP: {external_ip}{Style.RESET_ALL}")
     
+    output_sections = [external_ip]
+    
     # Try to get the AbuseIPDB API key from the environment
     api_key = os.environ.get("ABUSEIPDB_API_KEY")
     
-    # If no API key, just return the IP without reputation check
-    if not api_key:
-        return external_ip
-    
-    # Check reputation of the external IP
-    reputation_data = check_ip_reputation(external_ip, api_key)
-    
-    # Analyze and display the results
-    if reputation_data:
+    # Check AbuseIPDB reputation if API key is available
+    if api_key:
         try:
-            ip_reputation_output = analyze_ip_reputation(reputation_data)
-            if not silent:
-                print(ip_reputation_output)
-            return f"{external_ip}\n{ip_reputation_output}"
+            reputation_data = check_ip_reputation(external_ip, api_key)
+            if reputation_data:
+                ip_reputation_output = analyze_ip_reputation(reputation_data)
+                if not silent:
+                    print(ip_reputation_output)
+                output_sections.append(ip_reputation_output)
         except Exception as e:
-            print(f"{Fore.RED}Failed to analyze IP reputation data.{Style.RESET_ALL}")
-            print(f"{Fore.RED}Error: {e}{Style.RESET_ALL}")
+            error_msg = f"Failed to analyze AbuseIPDB reputation data: {e}"
+            if not silent:
+                print(f"{Fore.RED}{error_msg}{Style.RESET_ALL}")
     
-    return external_ip
+    # Always check Spamhaus blacklists (no API key required)
+    try:
+        spamhaus_data = check_spamhaus_blacklists(external_ip)
+        spamhaus_output = analyze_spamhaus_reputation(spamhaus_data)
+        if not silent:
+            print(spamhaus_output)
+        output_sections.append(spamhaus_output)
+    except Exception as e:
+        error_msg = f"Failed to check Spamhaus blacklists: {e}"
+        if not silent:
+            print(f"{Fore.RED}{error_msg}{Style.RESET_ALL}")
+    
+    return "\n".join(output_sections)
 
 
 def get_module_tools():
@@ -197,7 +369,7 @@ def get_module_tools():
             name="check_ip_reputation",
             function_name="main",
             module_path="network_tools.check_external_ip",
-            description="Get external IP address and check reputation using AbuseIPDB (requires ABUSEIPDB_API_KEY env var)",
+            description="Get external IP address and check reputation using AbuseIPDB and Spamhaus blacklists (ABUSEIPDB_API_KEY env var optional)",
             category=ToolCategory.NETWORK_DIAGNOSTICS,
             parameters={
                 "silent": ParameterInfo(
