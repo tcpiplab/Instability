@@ -7,6 +7,7 @@ timeout values, default target ranges, and memory file locations.
 
 import os
 import platform
+from pathlib import Path
 from typing import Dict, List
 
 # Version information
@@ -19,10 +20,12 @@ OLLAMA_API_URL = "http://localhost:11434"
 OLLAMA_TIMEOUT = 30
 
 # Memory and cache settings
-MEMORY_DIR = "memory"
-NETWORK_STATE_FILE = os.path.join(MEMORY_DIR, "network_state.md")
-TARGET_SCOPE_FILE = os.path.join(MEMORY_DIR, "target_scope.md")
-SESSION_CACHE_FILE = os.path.join(MEMORY_DIR, "session_cache.json")
+# Use absolute path to ensure memory files are always created in the project directory
+PROJECT_ROOT = Path(__file__).parent.resolve()
+MEMORY_DIR = PROJECT_ROOT / "memory"
+NETWORK_STATE_FILE = MEMORY_DIR / "network_state.md"
+TARGET_SCOPE_FILE = MEMORY_DIR / "target_scope.md"
+SESSION_CACHE_FILE = MEMORY_DIR / "session_cache.json"
 
 # Default target scope
 DEFAULT_TARGET_SCOPE = "local network only"
@@ -402,10 +405,15 @@ def get_platform_install_command(tool_name: str) -> str:
         return TOOL_INSTALL_COMMANDS[tool_name].get(system, "Tool installation instructions not available for this platform")
     return f"Installation instructions not available for {tool_name}"
 
-def get_memory_dir() -> str:
-    """Get the memory directory path, creating it if it doesn't exist."""
-    if not os.path.exists(MEMORY_DIR):
-        os.makedirs(MEMORY_DIR)
+def get_memory_dir() -> Path:
+    """
+    Get the memory directory path, creating it if it doesn't exist.
+
+    Returns:
+        Absolute Path object to the memory directory
+    """
+    if not MEMORY_DIR.exists():
+        MEMORY_DIR.mkdir(parents=True, exist_ok=True)
     return MEMORY_DIR
 
 def get_timeout(operation: str, scan_type: str = "basic") -> int:
