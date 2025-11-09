@@ -554,24 +554,38 @@ def format_targets_section(targets: List[Dict[str, Any]]) -> str:
 def test_memory_manager():
     """Test function for development purposes."""
     print("Testing memory manager module...")
-    
+
     # Test initialization
     initialize_memory_files()
     print(f"[{Fore.GREEN}OK{Style.RESET_ALL}] Memory files initialized")
-    
+
     # Test reading network state
     network_state = read_network_state()
     print(f"[{Fore.GREEN}OK{Style.RESET_ALL}] Network state loaded: {len(network_state)} sections")
-    
+
     # Test reading target scope
     target_scope = read_target_scope()
     print(f"[{Fore.GREEN}OK{Style.RESET_ALL}] Target scope loaded: {target_scope.get('scope_type', 'unknown')}")
-    
+
     # Test session cache
     cache = load_session_cache()
     print(f"[{Fore.GREEN}OK{Style.RESET_ALL}] Session cache loaded")
-    
+
     return True
+
+
+def get_module_tools():
+    """
+    Return tool metadata for this module.
+
+    All functions in this module are internal memory management functions
+    that should not be exposed directly via MCP. They are accessed through
+    higher-level interfaces like the chat tool's historical query features.
+
+    Returns:
+        Empty dict - no tools to expose from this module
+    """
+    return {}
 
 
 if __name__ == "__main__":

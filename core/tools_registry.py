@@ -178,7 +178,7 @@ class ToolRegistry:
             excluded_functions = {
                 'get_tool_registry',
                 # Error handling utilities
-                'create_error_response', 'create_input_error', 'create_network_error', 
+                'create_error_response', 'create_input_error', 'create_network_error',
                 'create_system_error', 'create_execution_error',
                 # Parsing utilities
                 'parse_ping_output', 'parse_traceroute_output', 'parse_unix_interface_ip',
@@ -204,12 +204,26 @@ class ToolRegistry:
                 'get_memory_dir', 'initialize_memory_files', 'read_network_state', 'read_target_scope',
                 'update_network_state', 'update_target_scope',
                 # Low-level utilities that should be wrapped by higher-level tools
-                'get_hostname_for_ip', 'detect_local_network'
+                'get_hostname_for_ip', 'detect_local_network',
+                # Internal memory/historical query functions (exposed via chat tool)
+                'cleanup_expired_cache_entries', 'get_baseline_data', 'get_network_trends',
+                'query_historical_patterns', 'search_tool_history', '_extract_cache_summary',
+                # Network tools formatting utilities (should be called internally)
+                'format_check_results', 'generate_dns_report',
+                # Generic/unclear entry points
+                'main',
+                # Standard library imports that should never be exposed
+                'urljoin', 'urlparse', 'init'
             }
             for name, obj in inspect.getmembers(module, inspect.isfunction):
+                # Skip private functions and excluded functions
                 if name.startswith('_') or name in excluded_functions:
                     continue
-                
+
+                # Skip imported functions (not defined in this module)
+                if obj.__module__ != module.__name__:
+                    continue
+
                 # Create basic metadata from function
                 sig = inspect.signature(obj)
                 doc = inspect.getdoc(obj) or f"Function {name} from {module_path}"
