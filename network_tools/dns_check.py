@@ -159,12 +159,53 @@ def main(silent: bool = False, polite: bool = False) -> str:
     return report
 
 
+def get_module_tools():
+    """
+    Return tool metadata for this module.
+
+    Only expose check_dns_root_servers as the public user-facing tool.
+    Internal utilities (check_dns_server, generate_dns_report, main) are hidden.
+
+    Returns:
+        Dict of tool metadata for public tools only
+    """
+    from core.tools_registry import ToolMetadata, ParameterInfo, ParameterType, ToolCategory
+
+    return {
+        "check_dns_root_servers": ToolMetadata(
+            name="check_dns_root_servers",
+            function_name="check_dns_root_servers",
+            module_path="network_tools.dns_check",
+            description="Check connectivity to DNS root servers to verify DNS infrastructure",
+            category=ToolCategory.DNS,
+            parameters={
+                "servers": ParameterInfo(
+                    param_type=ParameterType.DICT,
+                    required=False,
+                    description="Dict of DNS root servers to check (default: all 13 root servers)"
+                ),
+                "retry_failed": ParameterInfo(
+                    param_type=ParameterType.BOOLEAN,
+                    required=False,
+                    default=True,
+                    description="Whether to retry failed servers"
+                )
+            },
+            modes=["manual", "chatbot"],
+            examples=[
+                "check_dns_root_servers()",
+                "check_dns_root_servers(retry_failed=False)"
+            ]
+        )
+    }
+
+
 if __name__ == "__main__":
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Check DNS root servers reachability")
     parser.add_argument("--silent", action="store_true", help="Suppress detailed output")
     parser.add_argument("--polite", action="store_true", help="Use more verbose/polite messaging")
-    
+
     args = parser.parse_args()
     main(silent=args.silent, polite=args.polite)

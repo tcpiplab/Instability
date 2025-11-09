@@ -255,5 +255,64 @@ def main(silent: bool = False, polite: bool = False) -> str:
     return result
 
 
+def get_module_tools():
+    """
+    Return tool metadata for this module.
+
+    Only expose check_websites_reachability as the public user-facing tool.
+    Internal utilities (check_website, format_check_results, main) are hidden.
+
+    Returns:
+        Dict of tool metadata for public tools only
+    """
+    from core.tools_registry import ToolMetadata, ParameterInfo, ParameterType, ToolCategory
+
+    return {
+        "check_websites_reachability": ToolMetadata(
+            name="check_websites_reachability",
+            function_name="check_websites_reachability",
+            module_path="network_tools.web_check",
+            description="Check connectivity to major websites to verify internet access",
+            category=ToolCategory.WEB,
+            parameters={
+                "websites": ParameterInfo(
+                    param_type=ParameterType.LIST,
+                    required=False,
+                    description="List of website URLs to check (default: major sites)"
+                ),
+                "max_retries": ParameterInfo(
+                    param_type=ParameterType.INTEGER,
+                    required=False,
+                    default=1,
+                    description="Maximum retry attempts per website"
+                ),
+                "retry_delay": ParameterInfo(
+                    param_type=ParameterType.INTEGER,
+                    required=False,
+                    default=3,
+                    description="Delay in seconds between retries"
+                ),
+                "timeout": ParameterInfo(
+                    param_type=ParameterType.INTEGER,
+                    required=False,
+                    default=10,
+                    description="Request timeout in seconds"
+                ),
+                "silent": ParameterInfo(
+                    param_type=ParameterType.BOOLEAN,
+                    required=False,
+                    default=False,
+                    description="Suppress progress output"
+                )
+            },
+            modes=["manual", "chatbot"],
+            examples=[
+                "check_websites_reachability()",
+                "check_websites_reachability(timeout=5, silent=True)"
+            ]
+        )
+    }
+
+
 if __name__ == "__main__":
     main(silent=False)
