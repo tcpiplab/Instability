@@ -341,7 +341,7 @@ def handle_command(command: str, cache: Dict[str, Any]) -> Tuple[bool, bool]:
     elif cmd == '/tools':
         tools = get_available_tools()
         print(f"\n{USER_COLOR}Available tools:{Style.RESET_ALL}")
-        for name, func in tools.items():
+        for name, func in sorted(tools.items()):
             desc = func.__doc__.split('\n')[0].strip() if func.__doc__ else "No description"
             print(f"  {TOOL_COLOR}{name}{Style.RESET_ALL} - {desc}")
         return True, False
