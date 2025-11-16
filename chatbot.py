@@ -147,14 +147,33 @@ def setup_readline():
     # Set the completer
     readline.set_completer(completer)
 
-    # Set the delimiter
-    if sys.platform != 'win32':
+    # Configure readline/libedit for completion
+    # macOS uses libedit which has different syntax than GNU readline
+    try:
+        # Detect if we're using libedit (macOS) or GNU readline
+        is_libedit = 'libedit' in readline.__doc__ if readline.__doc__ else False
+
+        if sys.platform == 'darwin' or is_libedit:
+            # macOS/libedit configuration
+            readline.parse_and_bind('bind ^I rl_complete')  # Bind tab to completion
+            # Set word break characters (exclude / so it's part of the word)
+            readline.set_completer_delims(' \t\n;')
+        elif sys.platform == 'win32':
+            # Windows pyreadline3 configuration
+            readline.set_completer_delims(' \t\n;')
+            readline.parse_and_bind('tab: complete')
+        else:
+            # Linux/GNU readline configuration
+            readline.set_completer_delims(' \t\n;')
+            readline.parse_and_bind('tab: complete')
+            # Show all matches on first tab if ambiguous
+            readline.parse_and_bind('set show-all-if-ambiguous on')
+            # Display matches in columns
+            readline.parse_and_bind('set completion-display-width 0')
+    except Exception as e:
+        # Fallback to basic configuration if any parse_and_bind fails
+        print(f"{Style.DIM}Note: Advanced tab completion may not be available: {e}{Style.RESET_ALL}")
         readline.set_completer_delims(' \t\n;')
-        readline.parse_and_bind('tab: complete')
-    else:
-        # Windows uses different readline library
-        readline.set_completer_delims(' \t\n;')
-        readline.parse_and_bind('tab: complete')
 
 
 # Cache management functions
@@ -516,6 +535,25 @@ DO NOT include any "TOOL:" calls or "ARGS:" sections in your response.
         return True, False
 
 
+def _make_readline_prompt(prompt_text: str) -> str:
+    """Wrap ANSI color codes in readline ignore markers to fix cursor positioning
+
+    Readline needs to know which characters are non-printing (invisible) so it can
+    properly calculate cursor positions. Without this, arrow keys and backspace
+    will behave incorrectly when the prompt contains color codes.
+    """
+    if not READLINE_AVAILABLE:
+        return prompt_text
+
+    # Replace ANSI escape sequences with wrapped versions
+    # \x01 = RL_PROMPT_START_IGNORE, \x02 = RL_PROMPT_END_IGNORE
+    import re
+    # Match ANSI escape sequences (ESC[...m format)
+    ansi_pattern = r'(\x1b\[[0-9;]*m)'
+    # Use a lambda to properly insert the escape codes and backreference
+    return re.sub(ansi_pattern, lambda m: f'\x01{m.group(1)}\x02', prompt_text)
+
+
 def start_interactive_session(model_name: str = DEFAULT_MODEL, startup_context: Optional[Dict[str, Any]] = None) -> None:
     """Start the interactive chatbot session"""
     # Setup readline for command history and completion
@@ -523,7 +561,7 @@ def start_interactive_session(model_name: str = DEFAULT_MODEL, startup_context: 
 
     # Load cache
     cache = load_cache()
-    
+
     # Store startup context in cache for use by /think command
     if startup_context:
         cache['_startup_context'] = startup_context
@@ -639,8 +677,9 @@ After tool execution, interpret results concisely without repeating obvious info
     # Main interaction loop
     try:
         while True:
-            # Get user input
-            user_input = input(f"{USER_COLOR}User: {Style.RESET_ALL}")
+            # Get user input with properly wrapped color codes for readline
+            prompt = _make_readline_prompt(f"{USER_COLOR}User: {Style.RESET_ALL}")
+            user_input = input(prompt)
 
             # Check if it's a command
             handled, should_exit = handle_command(user_input, cache)
