@@ -406,21 +406,54 @@ def handle_command(command: str, cache: Dict[str, Any]) -> Tuple[bool, bool]:
             return True, False
 
     elif cmd.startswith('/'):
-        # Check if it's a direct tool call
-        tool_name = cmd[1:]  # Remove the leading /
+        # Check if it's a direct tool call (possibly with arguments)
+        # Split into tool name and arguments
+        parts = command.split(None, 1)  # Split on first whitespace only
+        tool_name = parts[0][1:].lower()  # Remove leading / and lowercase
+        args_string = parts[1] if len(parts) > 1 else ""
+
         tools = get_available_tools()
 
         if tool_name in tools:
             print_tool_execution(tool_name)
             try:
+                # Parse arguments from the command line
+                tool_args = {}
+                if args_string:
+                    # Try to parse as key=value pairs first
+                    if '=' in args_string:
+                        # Parse key=value arguments
+                        for arg in args_string.split():
+                            if '=' in arg:
+                                key, value = arg.split('=', 1)
+                                tool_args[key] = value
+                    else:
+                        # Treat as positional argument(s)
+                        # Get the tool's function signature to determine parameter name
+                        import inspect
+                        func = tools[tool_name]
+                        try:
+                            sig = inspect.signature(func)
+                            params = [p for p in sig.parameters.keys()
+                                     if p not in ['self', 'silent', 'timeout', 'count']]
+                            if params:
+                                # Map first argument to first parameter
+                                # For multiple space-separated values, join them back
+                                tool_args[params[0]] = args_string
+                        except Exception:
+                            # Fallback: try common parameter names
+                            for param_name in ['target', 'host', 'hostname', 'address', 'ip', 'url']:
+                                tool_args[param_name] = args_string
+                                break
+
                 # Use v3 tool registry for proper execution
                 registry = get_tool_registry()
-                result = registry.execute_tool(tool_name, {}, mode="manual")
-                
+                result = registry.execute_tool(tool_name, tool_args, mode="manual")
+
                 # Display the result for manual tool calls
                 if result:
                     print(f"{ASSISTANT_COLOR}Result: {Style.RESET_ALL}")
-                    
+
                     # Format JSON results nicely with Rich if available
                     if RICH_AVAILABLE and isinstance(result, dict):
                         from rich.json import JSON
@@ -441,7 +474,7 @@ def handle_command(command: str, cache: Dict[str, Any]) -> Tuple[bool, bool]:
                 print_error(f"Error executing tool {tool_name}: {Fore.RED}{e}{Style.RESET_ALL}")
             return True, False
         else:
-            print_error(f"Unknown command or tool: {cmd}")
+            print_error(f"Unknown command or tool: {tool_name}")
             return True, False
 
     # Not a command
