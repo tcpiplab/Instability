@@ -43,6 +43,7 @@ class ParameterInfo:
     choices: Optional[List[str]] = None
     min_value: Optional[Union[int, float]] = None
     max_value: Optional[Union[int, float]] = None
+    aliases: Optional[List[str]] = None  # Alternative parameter names (e.g., ["ip", "address"] for "ip_address")
 
 @dataclass
 class ToolMetadata:
@@ -466,12 +467,28 @@ class ToolRegistry:
         # Validate and prepare parameters
         if parameters is None:
             parameters = {}
-        
-        # Filter parameters to only include those defined in metadata
-        filtered_parameters = {}
+
+        # Normalize parameter names using aliases before filtering
+        normalized_parameters = {}
         for param_name, param_value in parameters.items():
+            # Check if this is a direct parameter name
             if param_name in metadata.parameters:
-                filtered_parameters[param_name] = param_value
+                normalized_parameters[param_name] = param_value
+            else:
+                # Check if this matches any parameter alias
+                matched = False
+                for actual_param_name, param_info in metadata.parameters.items():
+                    if param_info.aliases and param_name in param_info.aliases:
+                        normalized_parameters[actual_param_name] = param_value
+                        matched = True
+                        break
+
+                # If no match found, skip this parameter (will be caught by validation)
+                if not matched:
+                    pass  # Parameter will be ignored
+
+        # Use normalized parameters for further processing
+        filtered_parameters = normalized_parameters
         
         # Validate required parameters
         for param_name, param_info in metadata.parameters.items():

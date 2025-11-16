@@ -448,7 +448,8 @@ def get_module_tools():
                 "ip_address": ParameterInfo(
                     param_type=ParameterType.STRING,
                     required=True,
-                    description="IP address for reverse lookup"
+                    description="IP address for reverse lookup",
+                    aliases=["ip", "address", "target", "host"]
                 ),
                 "silent": ParameterInfo(
                     param_type=ParameterType.BOOLEAN,
