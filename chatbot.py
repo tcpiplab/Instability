@@ -645,6 +645,8 @@ IMPORTANT: Do NOT use pentesting tools (nmap_scan, os_detection_scan, etc.) for 
 
 Examples of when you MUST use tools:
 - Questions about ping times or connectivity → use ping_target
+- Forward DNS lookup (hostname → IP address, e.g., "what is the IP of example.com?") → use resolve_hostname
+- Reverse DNS lookup (IP address → hostname, e.g., "what hostname does 8.8.8.8 resolve to?") → use reverse_dns_lookup
 - DNS resolution issues → use check_dns_resolvers
 - DNS root server issues → use check_dns_root_servers
 - IP address questions → use get_external_ip or get_local_ip
