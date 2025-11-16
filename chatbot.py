@@ -129,7 +129,7 @@ def setup_readline():
     # Command completion function
     def completer(text, state):
         # Basic commands
-        commands = ['/help', '/exit', '/quit', '/clear', '/tools', '/think']
+        commands = ['/help', '/exit', '/quit', '/clear', '/tools', '/tool_finder', '/think']
 
         # Add tool commands
         tools = get_available_tools()
@@ -324,14 +324,15 @@ def handle_command(command: str, cache: Dict[str, Any]) -> Tuple[bool, bool]:
 
     elif cmd == '/help':
         print(f"\n{USER_COLOR}Available commands:{Style.RESET_ALL}")
-        print(f"  {USER_COLOR}/help{Style.RESET_ALL}  - Show this help message")
-        print(f"  {USER_COLOR}/exit{Style.RESET_ALL}  - Exit the chatbot")
-        print(f"  {USER_COLOR}/quit{Style.RESET_ALL}  - Same as /exit")
-        print(f"  {USER_COLOR}/clear{Style.RESET_ALL} - Clear conversation history")
-        print(f"  {USER_COLOR}/tools{Style.RESET_ALL} - List available diagnostic tools")
-        print(f"  {USER_COLOR}/cache{Style.RESET_ALL} - Display cached data")
-        print(f"  {USER_COLOR}/think{Style.RESET_ALL} - Think about input without running tools")
-        print(f"  {USER_COLOR}/<tool>{Style.RESET_ALL} - Run a specific tool directly")
+        print(f"  {USER_COLOR}/help{Style.RESET_ALL}        - Show this help message")
+        print(f"  {USER_COLOR}/exit{Style.RESET_ALL}        - Exit the chatbot")
+        print(f"  {USER_COLOR}/quit{Style.RESET_ALL}        - Same as /exit")
+        print(f"  {USER_COLOR}/clear{Style.RESET_ALL}       - Clear conversation history")
+        print(f"  {USER_COLOR}/tools{Style.RESET_ALL}       - List available diagnostic tools")
+        print(f"  {USER_COLOR}/tool_finder{Style.RESET_ALL} - Search for tools by keyword (e.g., /tool_finder dns)")
+        print(f"  {USER_COLOR}/cache{Style.RESET_ALL}       - Display cached data")
+        print(f"  {USER_COLOR}/think{Style.RESET_ALL}       - Think about input without running tools")
+        print(f"  {USER_COLOR}/<tool>{Style.RESET_ALL}      - Run a specific tool directly")
         return True, False
 
     elif cmd == '/clear':
@@ -352,6 +353,29 @@ def handle_command(command: str, cache: Dict[str, Any]) -> Tuple[bool, bool]:
             if not key.startswith('_'):  # Skip internal keys
                 print(f"  {TOOL_COLOR}{key}{Style.RESET_ALL}: {value}")
         return True, False
+
+    elif cmd.startswith('/tool_finder '):
+        # Handle /tool_finder command - search for tools by keyword
+        search_term = cmd[13:].strip()  # Remove '/tool_finder ' prefix
+        if search_term:
+            tools = get_available_tools()
+            # Filter tools that contain the search term (case-insensitive)
+            matching_tools = {
+                name: func for name, func in tools.items()
+                if search_term.lower() in name.lower()
+            }
+
+            if matching_tools:
+                print(f"\n{USER_COLOR}Tools matching '{search_term}':{Style.RESET_ALL}")
+                for name, func in sorted(matching_tools.items()):
+                    desc = func.__doc__.split('\n')[0].strip() if func.__doc__ else "No description"
+                    print(f"  {TOOL_COLOR}/{name}{Style.RESET_ALL} - {desc}")
+            else:
+                print(f"\n{USER_COLOR}No tools found matching '{search_term}'{Style.RESET_ALL}")
+            return True, False
+        else:
+            print_error("Please provide a search term after /tool_finder command")
+            return True, False
 
     elif cmd.startswith('/think '):
         # Handle /think command - think about the input without running tools
