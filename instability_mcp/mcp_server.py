@@ -8,8 +8,11 @@ the existing v3 architecture and tool registry.
 import asyncio
 import logging
 import sys
-from typing import Dict, Any, Optional, List
+import time
+from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
+from typing import Dict, Any, Optional, List
 
 try:
     from mcp import server, types
@@ -21,6 +24,83 @@ from instability_mcp.session_manager import SessionManager
 from instability_mcp.auth import setup_mcp_auth, create_auth_error_response, MCPAuthError
 from core.tools_registry import get_tool_registry
 from core.startup_checks import run_startup_sequence
+from config import MCP_RATE_LIMIT_REQUESTS, MCP_RATE_LIMIT_WINDOW, MCP_AUDIT_LOG_FILE
+
+
+# ---------------------------------------------------------------------------
+# Rate limiting (T5 hardening)
+# ---------------------------------------------------------------------------
+
+# Per-session request timestamps: {session_id: [timestamp, ...]}
+_rate_limit_store: Dict[str, List[float]] = defaultdict(list)
+
+
+def _check_rate_limit(session_id: str) -> bool:
+    """
+    Token-bucket rate limiter: allow at most MCP_RATE_LIMIT_REQUESTS requests
+    per MCP_RATE_LIMIT_WINDOW seconds per session.
+
+    Args:
+        session_id: Identifier for the requesting session (or "anonymous").
+
+    Returns:
+        True if the request is within the allowed rate, False if it should
+        be denied.
+    """
+    now = time.monotonic()
+    window_start = now - MCP_RATE_LIMIT_WINDOW
+
+    # Discard timestamps outside the current window
+    _rate_limit_store[session_id] = [
+        ts for ts in _rate_limit_store[session_id] if ts > window_start
+    ]
+
+    if len(_rate_limit_store[session_id]) >= MCP_RATE_LIMIT_REQUESTS:
+        return False
+
+    _rate_limit_store[session_id].append(now)
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Audit logging (T5 hardening)
+# ---------------------------------------------------------------------------
+
+_audit_logger = logging.getLogger("mcp.audit")
+_audit_handler_installed = False
+
+
+def _ensure_audit_handler() -> None:
+    """Attach a file handler to the audit logger on first call."""
+    global _audit_handler_installed
+    if _audit_handler_installed:
+        return
+    try:
+        log_path = Path(MCP_AUDIT_LOG_FILE)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        handler = logging.FileHandler(log_path, encoding="utf-8")
+        handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+        _audit_logger.addHandler(handler)
+        _audit_logger.setLevel(logging.INFO)
+        _audit_logger.propagate = False
+        _audit_handler_installed = True
+    except OSError:
+        pass  # Audit log unavailable - degrade gracefully
+
+
+def _audit_log(session_id: str, tool_name: str, result_status: str) -> None:
+    """
+    Write a single audit record to the MCP audit log.
+
+    Args:
+        session_id   : Session that made the request.
+        tool_name    : Name of the tool called.
+        result_status: "success", "blocked", or "error".
+    """
+    _ensure_audit_handler()
+    _audit_logger.info(
+        f"session={session_id} tool={tool_name} status={result_status}"
+    )
 
 
 class InstabilityChatbotMCPServer(Server):
@@ -182,19 +262,33 @@ class InstabilityChatbotMCPServer(Server):
     
     async def call_tool(self, name: str, arguments: Dict[str, Any]) -> List[types.TextContent]:
         """Execute a tool call"""
+        # Derive a session identifier for rate limiting / audit logging
+        session_id = arguments.get("session_id", "anonymous")
+
+        # Rate limiting (T5)
+        if not _check_rate_limit(session_id):
+            _audit_log(session_id, name, "blocked-rate-limit")
+            return [types.TextContent(
+                type="text",
+                text=f"Rate limit exceeded - too many requests. Retry after {MCP_RATE_LIMIT_WINDOW}s."
+            )]
+
         try:
             self._logger.info(f"Calling tool: {name} with args: {arguments}")
-            
+
             if name == "chat":
-                return await self._handle_chat(arguments)
+                result = await self._handle_chat(arguments)
             elif name == "start_session":
-                return await self._handle_start_session(arguments)
+                result = await self._handle_start_session(arguments)
             else:
-                # Handle direct tool execution
-                return await self._handle_tool_execution(name, arguments)
-                
+                result = await self._handle_tool_execution(name, arguments)
+
+            _audit_log(session_id, name, "success")
+            return result
+
         except Exception as e:
             self._logger.error(f"Error calling tool {name}: {e}")
+            _audit_log(session_id, name, "error")
             return [types.TextContent(
                 type="text",
                 text=f"Error executing tool {name} - {str(e)}"

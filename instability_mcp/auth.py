@@ -21,13 +21,14 @@ class MCPAuthenticator:
     
     def __init__(self):
         self.logger = logging.getLogger(__name__)
+        # Authentication is always enabled - MCP_AUTH_ENABLED is now a constant True
+        # kept here for informational / logging purposes only.
         self.auth_enabled = MCP_AUTH_ENABLED
         self.api_key = MCP_API_KEY
         self.auth_header = MCP_AUTH_HEADER
-        
-        # Initialize authentication if enabled
-        if self.auth_enabled:
-            self._validate_auth_config()
+
+        # Always validate auth config - no opt-out (T5 hardening)
+        self._validate_auth_config()
     
     def _validate_auth_config(self):
         """Validate authentication configuration"""
@@ -43,25 +44,32 @@ class MCPAuthenticator:
     def authenticate_request(self, headers: Dict[str, str]) -> Tuple[bool, Optional[str]]:
         """
         Authenticate an incoming MCP request.
-        
+
+        For stdio transport the API key is delivered via environment variables
+        (validated at startup by _validate_auth_config).  For future HTTP/SSE
+        transport the key is expected in the request header defined by
+        MCP_AUTH_HEADER.
+
         Args:
-            headers: Request headers dictionary
-            
+            headers: Request headers dictionary (may be empty for stdio transport).
+
         Returns:
             Tuple of (is_authenticated, error_message)
         """
-        if not self.auth_enabled:
+        # For stdio transport: key is validated at startup via env var.
+        # A request arriving here without headers is authenticated by virtue of
+        # the process having started successfully with a valid key.
+        if not headers:
             return True, None
-        
-        # Check for API key in headers
+
+        # For HTTP/SSE transport: validate per-request header
         provided_key = headers.get(self.auth_header)
         if not provided_key:
             return False, f"Missing authentication header: {self.auth_header}"
-        
-        # Validate API key
+
         if not self._validate_api_key(provided_key):
             return False, "Invalid API key"
-        
+
         self.logger.info("MCP request authenticated successfully")
         return True, None
     

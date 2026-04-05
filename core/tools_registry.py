@@ -33,6 +33,23 @@ class ToolCategory(Enum):
     SECURITY = "security"
     EMAIL_DIAGNOSTICS = "email_diagnostics"
 
+class RiskLevel(Enum):
+    """
+    Risk classification for tools.
+
+    Used by the guardian layer in chatbot mode to decide whether a
+    confirmation prompt is required before execution.
+
+      LOW    - read-only, passive, local-only (ping, system_info, dns lookup)
+      MEDIUM - active network contact, no exploitation (port scan, web check)
+      HIGH   - active scanning with service/version probing (nmap -sV, nuclei)
+      CRITICAL - exploitation, brute-force, or data modification (hydra, sqlmap)
+    """
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
 @dataclass
 class ParameterInfo:
     """Information about a tool parameter"""
@@ -61,6 +78,7 @@ class ToolMetadata:
     aliases: List[str] = field(default_factory=list)
     examples: List[str] = field(default_factory=list)
     function_ref: Optional[Callable] = None
+    risk_level: RiskLevel = field(default_factory=lambda: RiskLevel.MEDIUM)
 
 class ToolRegistry:
     """
@@ -316,6 +334,17 @@ class ToolRegistry:
             # Extract the tools dictionary from the inventory structure
             self._external_tools = external_tools_inventory.get("tools", {})
             
+            # Risk levels for known external tools
+            _external_tool_risk = {
+                "nmap": RiskLevel.HIGH,
+                "nuclei": RiskLevel.HIGH,
+                "httpx": RiskLevel.MEDIUM,
+                "feroxbuster": RiskLevel.MEDIUM,
+                "gobuster": RiskLevel.MEDIUM,
+                "hydra": RiskLevel.CRITICAL,
+                "sqlmap": RiskLevel.CRITICAL,
+            }
+
             # Register external tools as metadata entries
             for tool_name, tool_info in self._external_tools.items():
                 if tool_info.get("found", False):
@@ -328,7 +357,8 @@ class ToolRegistry:
                         category=ToolCategory.PENTESTING,
                         requires_external_tool=True,
                         external_tool_name=tool_name,
-                        modes=["manual", "chatbot"]
+                        modes=["manual", "chatbot"],
+                        risk_level=_external_tool_risk.get(tool_name, RiskLevel.HIGH),
                     )
                     
                     # Try to find wrapper function
@@ -499,7 +529,17 @@ class ToolRegistry:
                     f"Required parameter '{param_name}' missing",
                     tool_name=tool_name
                 )
-        
+
+        # Validate parameter values (T2: parameter injection defence)
+        validation_error = _validate_tool_parameters(filtered_parameters, metadata, tool_name)
+        if validation_error:
+            return validation_error
+
+        # Scope enforcement for network and pentesting tools (T3: scope violation defence)
+        scope_error = _enforce_scope(filtered_parameters, metadata, tool_name)
+        if scope_error:
+            return scope_error
+
         # Execute tool
         if metadata.function_ref:
             try:
@@ -508,14 +548,17 @@ class ToolRegistry:
                     # Force silent mode for MCP to prevent Claude Desktop crashes
                     if 'silent' in metadata.parameters:
                         filtered_parameters['silent'] = True
-                
+
                 # Execute tool normally - let MCP server handle stdout suppression
                 result = metadata.function_ref(**filtered_parameters)
-                
+
+                # Truncate large outputs before they reach the LLM context (T4 / Phase 3)
+                result = _truncate_tool_output(result)
+
                 # Sanitize output for MCP compatibility
                 if os.environ.get('MCP_MODE') == '1':
                     result = self._sanitize_for_mcp(result)
-                
+
                 return result
             except Exception as e:
                 return create_error_response(
@@ -654,6 +697,148 @@ class ToolRegistry:
             result += "\n"
         
         return result
+
+# ---------------------------------------------------------------------------
+# Parameter validation and scope enforcement helpers (T2, T3 defences)
+# These are module-level functions so they can be tested independently.
+# ---------------------------------------------------------------------------
+
+# Categories whose tools accept network targets and must pass scope checks
+_SCOPED_CATEGORIES = {ToolCategory.NETWORK_DIAGNOSTICS, ToolCategory.PENTESTING}
+
+# Parameter names treated as network targets
+_TARGET_PARAMS = {"target", "host", "ip", "ip_address", "destination"}
+
+# Parameter names treated as port specifications
+_PORT_PARAMS = {"ports", "port", "port_range"}
+
+
+def _validate_tool_parameters(
+    parameters: Dict[str, Any],
+    metadata: "ToolMetadata",
+    tool_name: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    Validate parameter values for a tool call.
+
+    Checks target format and port format using existing validators so that
+    LLM-generated parameters cannot inject flags into subprocess calls (T2).
+
+    Args:
+        parameters: Filtered parameter dict about to be passed to the tool.
+        metadata  : Tool metadata including parameter definitions.
+        tool_name : Name of the tool (for error messages).
+
+    Returns:
+        An error response dict if validation fails, otherwise None.
+    """
+    from core.error_handling import create_error_response, ErrorType, ErrorCode, ErrorRecovery
+
+    for param_name, value in parameters.items():
+        if value is None:
+            continue
+
+        if param_name in _TARGET_PARAMS and isinstance(value, str):
+            valid, msg = ErrorRecovery.validate_target(value)
+            if not valid:
+                return create_error_response(
+                    ErrorType.INPUT,
+                    ErrorCode.INVALID_TARGET,
+                    f"Invalid target '{value}': {msg}",
+                    tool_name=tool_name,
+                )
+
+        if param_name in _PORT_PARAMS and value is not None:
+            valid, msg = ErrorRecovery.validate_port(value)
+            if not valid:
+                return create_error_response(
+                    ErrorType.INPUT,
+                    ErrorCode.INVALID_TARGET,
+                    f"Invalid port specification '{value}': {msg}",
+                    tool_name=tool_name,
+                )
+
+    return None
+
+
+def _enforce_scope(
+    parameters: Dict[str, Any],
+    metadata: "ToolMetadata",
+    tool_name: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    Enforce the target scope policy for network and pentesting tools (T3).
+
+    Only applies to tools in NETWORK_DIAGNOSTICS or PENTESTING categories.
+    If the target is outside the authorized scope the call is denied and a
+    descriptive error is returned.
+
+    Args:
+        parameters: Filtered, already-validated parameter dict.
+        metadata  : Tool metadata including category.
+        tool_name : Name of the tool (for error messages).
+
+    Returns:
+        An error response dict if the target is out of scope, otherwise None.
+    """
+    from core.error_handling import create_error_response, ErrorType, ErrorCode
+    from core.scope_enforcement import is_target_in_scope, load_scope_config
+
+    if metadata.category not in _SCOPED_CATEGORIES:
+        return None
+
+    scope_config = load_scope_config()
+
+    for param_name, value in parameters.items():
+        if param_name not in _TARGET_PARAMS or not isinstance(value, str):
+            continue
+
+        in_scope, reason = is_target_in_scope(value, scope_config)
+        if not in_scope:
+            return create_error_response(
+                ErrorType.INPUT,
+                ErrorCode.INVALID_TARGET,
+                f"Scope violation: {reason}",
+                tool_name=tool_name,
+            )
+
+    return None
+
+
+def _truncate_tool_output(result: Any, max_chars: int = 8000) -> Any:
+    """
+    Truncate excessively large string values in a tool result dict so they
+    cannot poison the LLM context with adversarial content or exhaust the
+    model's context window (T4 / Phase 3 output-size limit).
+
+    Non-dict results are returned unchanged.
+
+    Args:
+        result   : Tool result, typically a Dict[str, Any].
+        max_chars: Maximum characters allowed per string field.
+
+    Returns:
+        Result with long string values truncated.
+    """
+    if not isinstance(result, dict):
+        return result
+
+    truncated = {}
+    for key, value in result.items():
+        if isinstance(value, str) and len(value) > max_chars:
+            truncated[key] = value[:max_chars] + f"\n[... output truncated at {max_chars} chars ...]"
+        elif isinstance(value, dict):
+            truncated[key] = _truncate_tool_output(value, max_chars)
+        elif isinstance(value, list):
+            truncated[key] = [
+                _truncate_tool_output(item, max_chars) if isinstance(item, dict)
+                else (item[:max_chars] + "[... truncated]" if isinstance(item, str) and len(item) > max_chars else item)
+                for item in value
+            ]
+        else:
+            truncated[key] = value
+    return truncated
+
 
 # Global registry instance
 _global_registry = None
