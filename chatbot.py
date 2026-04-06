@@ -329,6 +329,121 @@ def parse_tool_call(content: str) -> Tuple[Optional[str], Optional[Dict[str, Any
         return None, None
 
 
+# ---------------------------------------------------------------------------
+# Output sanitization (T4 defence)
+# ---------------------------------------------------------------------------
+
+def _sanitize_tool_result_for_llm(result: Any) -> str:
+    """
+    Convert a tool result to a string safe for injection into LLM context.
+
+    Strips patterns that look like tool-call instructions so that adversarial
+    content in tool output cannot trigger a second, unauthorized tool call
+    (indirect prompt injection / T4).
+
+    Args:
+        result: Raw tool result (dict, string, or other).
+
+    Returns:
+        Sanitized string representation.
+    """
+    import re
+    raw = str(result)
+
+    # Remove any embedded TOOL:/ARGS: patterns that could be parsed as tool calls
+    sanitized = re.sub(r'TOOL\s*:', '[TOOL_BLOCKED]:', raw, flags=re.IGNORECASE)
+    sanitized = re.sub(r'ARGS\s*:\s*\{', '[ARGS_BLOCKED]: {', sanitized, flags=re.IGNORECASE)
+
+    return sanitized
+
+
+# ---------------------------------------------------------------------------
+# Guardian layer (T1, T3 defences)
+# ---------------------------------------------------------------------------
+
+def _get_target_from_args(args: Dict[str, Any]) -> Optional[str]:
+    """
+    Extract the primary target value from a tool argument dict.
+
+    Args:
+        args: Parsed tool arguments.
+
+    Returns:
+        The target string, or None if no target-like parameter is present.
+    """
+    for key in ("target", "host", "ip", "ip_address", "destination", "network"):
+        if key in args and isinstance(args[key], str):
+            return args[key]
+    return None
+
+
+def _prompt_out_of_scope_confirmation(tool_name: str, target: str, reason: str) -> bool:
+    """
+    Prompt the user to confirm execution when a target is outside the
+    authorized scope.  Defaults to denial if the user just presses Enter.
+
+    Args:
+        tool_name: Name of the tool about to be executed.
+        target   : The out-of-scope target string.
+        reason   : Human-readable scope violation explanation.
+
+    Returns:
+        True if the user explicitly confirms, False otherwise.
+    """
+    print(f"\n{Fore.YELLOW}[SCOPE WARNING]{Style.RESET_ALL} {reason}")
+    print(f"{Fore.YELLOW}Tool '{tool_name}' targets '{target}' which is outside the authorized scope.{Style.RESET_ALL}")
+    try:
+        answer = input(f"{Fore.YELLOW}Proceed anyway? [y/N]: {Style.RESET_ALL}").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        return False
+    return answer == "y"
+
+
+def validate_tool_call(
+    tool_name: str,
+    args: Dict[str, Any],
+    registry: Any,
+) -> Tuple[bool, str]:
+    """
+    Guardian validator: review a tool call produced by the LLM before it
+    reaches execute_tool.
+
+    Checks performed (T1 + T3):
+      1. Tool name must be registered.
+      2. If the tool has a target parameter, check it against the scope
+         policy.  Out-of-scope targets prompt for user confirmation rather
+         than being silently blocked, so the operator stays in control.
+
+    Args:
+        tool_name: Name of the tool the LLM wants to call.
+        args     : Raw argument dict from parse_tool_call.
+        registry : The active ToolRegistry instance.
+
+    Returns:
+        Tuple of (allowed: bool, reason: str).
+        *reason* is an empty string when allowed is True.
+    """
+    from core.scope_enforcement import is_target_in_scope, load_scope_config
+
+    # T1: reject unregistered tool names (blocks prompt-injected fake tool calls)
+    metadata = registry.get_tool(tool_name)
+    if metadata is None:
+        return False, f"Tool '{tool_name}' is not registered"
+
+    # T3: scope check for tools that accept a target
+    target = _get_target_from_args(args)
+    if target:
+        scope_config = load_scope_config()
+        in_scope, scope_reason = is_target_in_scope(target, scope_config)
+        if not in_scope:
+            # Let the operator decide rather than silently blocking
+            confirmed = _prompt_out_of_scope_confirmation(tool_name, target, scope_reason)
+            if not confirmed:
+                return False, f"Execution denied: target '{target}' is out of scope and operator declined"
+
+    return True, ""
+
+
 # Command handling functions
 def handle_command(command: str, cache: Dict[str, Any]) -> Tuple[bool, bool]:
     """Handle special commands
@@ -782,6 +897,15 @@ After tool execution, interpret results concisely without repeating obvious info
                         try:
                             # Execute the tool using v3 registry (filters invalid parameters)
                             registry = get_tool_registry()
+
+                            # Guardian validation: scope check + unregistered-tool block (T1, T3)
+                            allowed, denial_reason = validate_tool_call(tool_name, args, registry)
+                            if not allowed:
+                                print(f"{Fore.RED}[GUARDIAN] Tool call blocked: {denial_reason}{Style.RESET_ALL}")
+                                conversation.append({"role": "assistant", "content": content})
+                                conversation.append({"role": "system", "content": f"Tool call blocked by security policy: {denial_reason}"})
+                                continue
+
                             tool_result = registry.execute_tool(tool_name, args, mode="chatbot")
                             # Tool result suppressed for clean output
 
@@ -789,9 +913,11 @@ After tool execution, interpret results concisely without repeating obvious info
                             cache[tool_name] = tool_result
                             save_cache(cache)
 
-                            # Add tool execution and result to conversation
+                            # Add tool execution and result to conversation.
+                            # Sanitize result before injection to prevent indirect prompt injection (T4).
+                            safe_result = _sanitize_tool_result_for_llm(tool_result)
                             conversation.append({"role": "assistant", "content": content})
-                            conversation.append({"role": "system", "content": f"Tool result: {tool_result}"})
+                            conversation.append({"role": "system", "content": f"Tool result: {safe_result}"})
 
                             # Get follow-up response with streaming
                             follow_up_stream = ollama.chat(

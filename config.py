@@ -40,9 +40,18 @@ TRACEROUTE_TIMEOUT = 30
 TOOL_DETECTION_TIMEOUT = 5
 
 # MCP server authentication settings
-MCP_AUTH_ENABLED = os.getenv("MCP_AUTH_ENABLED", "true").lower() == "true"
+# Authentication is always enabled for the MCP server - the opt-out has been
+# removed as part of the Phase 4 security hardening (T5).
+MCP_AUTH_ENABLED = True
 MCP_API_KEY = os.getenv("MCP_API_KEY", "")
 MCP_AUTH_HEADER = "X-API-Key"
+
+# MCP rate limiting settings (requests per session per minute)
+MCP_RATE_LIMIT_REQUESTS = int(os.getenv("MCP_RATE_LIMIT_REQUESTS", "60"))
+MCP_RATE_LIMIT_WINDOW = 60  # seconds
+
+# Audit log file path (relative to project root)
+MCP_AUDIT_LOG_FILE = PROJECT_ROOT / "memory" / "mcp_audit.log"
 
 # Cross-platform tool paths for detection
 # The system will check these paths in order and use the first found
