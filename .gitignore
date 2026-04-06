@@ -6,6 +6,9 @@ __pycache__/
 # Memory files with sensitive system information
 memory/tool_inventory_cache.json
 memory/session_cache.json
+memory/target_scope.md
+memory/network_state.md
+memory/mcp_audit.log
 /images/instability_ascii_ghost.png
 /images/instability_ascii_ghost_terminal.png
 /images/instability_ascii_ghost_terminal2.png

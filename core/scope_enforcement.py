@@ -35,6 +35,7 @@ def load_scope_config() -> Dict:
     config = {
         "scope_type": "local network only",
         "cidr_ranges": [],
+        "explicit_ips": [],
         "local_only": True,
         "loaded": False,
     }
@@ -48,15 +49,27 @@ def load_scope_config() -> Dict:
         if scope_type_match:
             config["scope_type"] = scope_type_match.group(1).strip().lower()
 
-        config["local_only"] = "local network only" in config["scope_type"]
+        config["local_only"] = "local network only" == config["scope_type"]
 
-        # Extract any explicit CIDR ranges (e.g. "192.168.1.0/24")
+        # Extract explicit CIDR ranges (e.g. "192.168.1.0/24")
         cidr_pattern = re.compile(
             r'\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}'
             r'(?:25[0-5]|2[0-4]\d|[01]?\d\d?)'
             r'/(?:[0-9]|[12]\d|3[0-2])\b'
         )
         config["cidr_ranges"] = cidr_pattern.findall(scope_text)
+
+        # Extract standalone IP addresses (without CIDR suffix) listed as targets.
+        # Only captures IPs that appear on lines under "Authorized External Targets"
+        # or "Specific Targets" sections to avoid matching IPs in the Out-of-Scope
+        # or other metadata sections.
+        plain_ip_pattern = re.compile(
+            r'^\s*-\s*\*\*'
+            r'((?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?))'
+            r'\*\*',
+            re.MULTILINE,
+        )
+        config["explicit_ips"] = plain_ip_pattern.findall(scope_text)
 
     except (FileNotFoundError, PermissionError):
         # File missing or unreadable - default to local-only as safe fallback
@@ -144,24 +157,36 @@ def is_target_in_scope(target: str, scope_config: Optional[Dict] = None) -> Tupl
     if not ip_pattern.match(target):
         return True, f"Hostname '{target}' passed through scope check (resolve-time validation)"
 
-    # --- Explicit CIDR allowlist takes priority over local-only mode ---
+    # --- Explicit individual IP allowlist (highest priority) ---
+    if target in scope_config.get("explicit_ips", []):
+        return True, f"Target '{target}' is an explicitly authorized host"
+
+    # --- Explicit CIDR allowlist ---
     if scope_config["cidr_ranges"]:
         if _is_in_cidr_list(target, scope_config["cidr_ranges"]):
             return True, f"Target '{target}' is within authorized CIDR range"
-        return False, (
-            f"Target '{target}' is outside the authorized scope. "
-            f"Authorized ranges: {', '.join(scope_config['cidr_ranges'])}"
-        )
+        # Only deny here if there are no other authorization paths
+        if not scope_config.get("explicit_ips"):
+            return False, (
+                f"Target '{target}' is outside the authorized scope. "
+                f"Authorized ranges: {', '.join(scope_config['cidr_ranges'])}"
+            )
 
-    # --- Local-only mode ---
-    if scope_config["local_only"]:
+    # --- Local network check (applies when scope type contains "local network") ---
+    if "local network" in scope_config["scope_type"]:
         is_private, canonical = _is_private_address(target)
         if is_private:
             return True, f"Target '{target}' is within private/local address space"
+        if scope_config["local_only"]:
+            return False, (
+                f"Target '{target}' is a public/external address and the current "
+                f"scope is 'local network only'. Update target_scope.md to authorize "
+                f"external targets."
+            )
+        # Mixed scope (local + explicit externals): public IP not in explicit list is denied
         return False, (
-            f"Target '{target}' is a public/external address and the current "
-            f"scope is 'local network only'. Update target_scope.md to authorize "
-            f"external targets."
+            f"Target '{target}' is a public/external address not in the explicit "
+            f"host allowlist. Add it to target_scope.md under 'Authorized External Targets'."
         )
 
     # Scope type not recognized - deny by default (fail secure)
@@ -181,8 +206,13 @@ def get_scope_summary() -> str:
     config = load_scope_config()
     if not config["loaded"]:
         return "Scope: unknown (target_scope.md not found - defaulting to local network only)"
-    if config["cidr_ranges"]:
-        return f"Scope: explicit ranges {', '.join(config['cidr_ranges'])}"
+    parts = []
     if config["local_only"]:
-        return "Scope: local network only (RFC-1918 / loopback / link-local)"
+        parts.append("local network (RFC-1918 / loopback / link-local)")
+    if config["cidr_ranges"]:
+        parts.append(f"CIDR ranges: {', '.join(config['cidr_ranges'])}")
+    if config["explicit_ips"]:
+        parts.append(f"explicit hosts: {', '.join(config['explicit_ips'])}")
+    if parts:
+        return "Scope: " + "; ".join(parts)
     return f"Scope: {config['scope_type']}"
