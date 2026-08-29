@@ -6,11 +6,20 @@ resolver. It includes functionality to test response times and reliability of DN
 resolvers, which is critical for diagnosing network connectivity issues.
 """
 
+import dns.exception
+import dns.message
+import dns.query
 import dns.resolver
 import time
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 from colorama import Fore, Style
+
+from config import DOT_PORT, DOT_QUERY_TIMEOUT
+from .dns_interception import (
+    REACHABLE, UNKNOWN, UNREACHABLE,
+    dns_interception_detected, interception_notice,
+)
 
 # List of DNS resolvers and their IP addresses
 DEFAULT_DNS_RESOLVERS = {
@@ -24,6 +33,26 @@ DEFAULT_DNS_RESOLVERS = {
     "Quad9 - Secondary": "149.112.112.112",
     "Comodo Secure DNS - Primary": "8.26.56.26",
     "Comodo Secure DNS - Secondary": "8.20.247.20"
+}
+
+# DoT hostnames, used for certificate validation. On a host where DNS is
+# intercepted, port 53 is answered locally for every destination, so DoT on
+# port 853 is the only way to reach the actual resolver -- see
+# docs/dns_interception_srd.md section 5.4.
+#
+# A resolver absent from this table has no DoT service and therefore cannot be
+# checked at all on an intercepted host. Measured 2026-08-29: the eight below
+# all answered over DoT with a passing negative control, while both Comodo
+# addresses time out on 853.
+DOT_HOSTNAMES = {
+    "8.8.8.8": "dns.google",
+    "8.8.4.4": "dns.google",
+    "1.1.1.1": "cloudflare-dns.com",
+    "1.0.0.1": "cloudflare-dns.com",
+    "208.67.222.222": "dns.opendns.com",
+    "208.67.220.220": "dns.opendns.com",
+    "9.9.9.9": "dns.quad9.net",
+    "149.112.112.112": "dns.quad9.net",
 }
 
 
@@ -75,14 +104,54 @@ def check_resolver(resolver_name: str, resolver_ip: str, query_domain: str = 'ex
             # If we get an answer, consider the resolver reachable
             if answer:
                 return True, response_time, None
-            
+
         except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.resolver.Timeout, dns.exception.DNSException) as e:
             if attempt == retry_attempts - 1:
                 return False, None, str(e)
             time.sleep(2)  # Sleep for 2 seconds before retrying
-    
+
     # If we reach here, all attempts failed but didn't raise exceptions
     return False, None, "No valid DNS response received"
+
+
+def check_resolver_over_tls(resolver_ip: str, query_domain: str = 'example.com',
+                            timeout: int = None) -> Tuple[bool, Optional[float], Optional[str]]:
+    """Check a DNS resolver over DoT, which a DNS proxy extension cannot capture.
+
+    On a host running a macOS DNS proxy network extension, a plain port-53 query
+    to any address is answered locally, so check_resolver above cannot fail and
+    its result means nothing. DoT runs on TCP 853, which is not intercepted, and
+    reaches the real resolver.
+
+    Args:
+        resolver_ip: IP address of the resolver.
+        query_domain: Domain to query.
+        timeout: Seconds to wait for the response.
+
+    Returns:
+        Tuple of (reachable, response_time_seconds, error_message). A resolver
+        with no entry in DOT_HOSTNAMES returns (False, None, reason) and the
+        caller reports it as UNKNOWN rather than unreachable -- not being
+        checkable is not the same as being down.
+    """
+    timeout = DOT_QUERY_TIMEOUT if timeout is None else timeout
+    hostname = DOT_HOSTNAMES.get(resolver_ip)
+    if hostname is None:
+        return False, None, "no DoT service; cannot be checked on this host"
+
+    query = dns.message.make_query(query_domain, 'A')
+    start_time = time.monotonic()
+    try:
+        response = dns.query.tls(query, resolver_ip, port=DOT_PORT,
+                                 timeout=timeout, server_hostname=hostname)
+    except dns.exception.Timeout:
+        return False, None, "timed out over DoT"
+    except (OSError, dns.exception.DNSException) as exc:
+        return False, None, f"DoT query failed: {exc}"
+
+    if not response.answer:
+        return False, None, "DoT connection succeeded but returned no answer"
+    return True, time.monotonic() - start_time, None
 
 
 def monitor_dns_resolvers(custom_resolvers: Optional[Dict[str, str]] = None) -> str:
@@ -97,10 +166,20 @@ def monitor_dns_resolvers(custom_resolvers: Optional[Dict[str, str]] = None) -> 
     """
     reachable_resolvers = []
     unreachable_resolvers = []
+    unknown_resolvers = []
     results = ""
     results += f"Starting DNS Resolver monitoring report at: {datetime.now()}\n"
     results += "This will check the reachability of several of the most popular DNS resolvers.\n"
-    
+
+    # If a DNS proxy is answering for every destination, a port-53 query proves
+    # nothing about the resolver it was addressed to. Switch to DoT, which is
+    # not captured, and report anything with no DoT service as UNKNOWN rather
+    # than inventing a verdict. See docs/dns_interception_srd.md section 5.4.
+    intercepted = dns_interception_detected()
+    if intercepted is not False:
+        results += f"{interception_notice()}\n"
+        results += "Falling back to DNS over TLS on port 853, which is not intercepted.\n"
+
     # Start with default resolvers
     resolvers_to_check = DEFAULT_DNS_RESOLVERS.copy()
     
@@ -117,8 +196,18 @@ def monitor_dns_resolvers(custom_resolvers: Optional[Dict[str, str]] = None) -> 
 
     # Iterate through the list of DNS resolvers and check their reachability
     for resolver_name, resolver_ip in resolvers_to_check.items():
-        is_reachable, response_time, error = check_resolver(resolver_name, resolver_ip)
-        
+        if intercepted is not False:
+            checkable = resolver_ip in DOT_HOSTNAMES
+            if not checkable:
+                reason = "no DoT service, and port 53 is intercepted here"
+                print(f"{Fore.YELLOW} - Cannot check {resolver_name} "
+                      f"({resolver_ip}): {reason}{Style.RESET_ALL}")
+                unknown_resolvers.append(f"{resolver_name}: not checkable: {reason}")
+                continue
+            is_reachable, response_time, error = check_resolver_over_tls(resolver_ip)
+        else:
+            is_reachable, response_time, error = check_resolver(resolver_name, resolver_ip)
+
         if is_reachable and response_time is not None:
             print(f"{Fore.GREEN} - Successfully queried {resolver_name} ({resolver_ip}): Response time {response_time:.3f} seconds{Style.RESET_ALL}")
             reachable_resolvers.append(f"{resolver_name}: Response Time: {response_time:.3f} seconds")
@@ -132,12 +221,28 @@ def monitor_dns_resolvers(custom_resolvers: Optional[Dict[str, str]] = None) -> 
     for resolver_info in reachable_resolvers:
         results += f"- {resolver_info}\n"
 
-    if not unreachable_resolvers:
-        results += "\nAll DNS resolvers are reachable.\n"
-    else:
+    if unreachable_resolvers:
         results += "\nUnreachable DNS Resolvers:\n"
         for resolver_info in unreachable_resolvers:
             results += f"- {resolver_info}\n"
+
+    # Stated separately and never folded into either of the others. A resolver
+    # nobody could check is not a resolver that answered, and it is not one that
+    # failed either.
+    if unknown_resolvers:
+        results += "\nDNS Resolvers That Could Not Be Checked:\n"
+        for resolver_info in unknown_resolvers:
+            results += f"- {resolver_info}\n"
+
+    if not unreachable_resolvers and not unknown_resolvers:
+        results += "\nAll DNS resolvers are reachable.\n"
+    elif not unreachable_resolvers:
+        results += (f"\nAll {len(reachable_resolvers)} checkable DNS resolvers are "
+                    f"reachable; {len(unknown_resolvers)} could not be checked.\n")
+    else:
+        results += (f"\nSummary: {len(reachable_resolvers)} reachable, "
+                    f"{len(unreachable_resolvers)} unreachable, "
+                    f"{len(unknown_resolvers)} not checkable.\n")
 
     return results
 

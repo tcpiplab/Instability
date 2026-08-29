@@ -204,6 +204,46 @@ DNS_TEST_SERVERS = [
     "208.67.222.222",  # OpenDNS
 ]
 
+# DNS interception detection. See docs/dns_interception_srd.md.
+#
+# A macOS DNS proxy network extension (Tailscale's, a corporate VPN client, a
+# captive portal) captures DNS flows system-wide, so a query to ANY address on
+# port 53 is answered locally. That makes every port-53 reachability check
+# report success unconditionally: measured 2026-08-29, a query to 240.0.0.1
+# came back NOERROR in under 10 ms.
+#
+# 240.0.0.1 is in reserved space (240.0.0.0/4) and is not routable, so nothing
+# can legitimately answer from it. Any response at all means DNS is intercepted.
+# The timeout is short because a clean host pays it in full on every probe,
+# while an intercepted one answers almost immediately.
+DNS_INTERCEPTION_PROBE_ADDRESS = "240.0.0.1"
+DNS_INTERCEPTION_PROBE_TIMEOUT = 1.5
+DNS_INTERCEPTION_PROBE_NAME = "example.com"
+
+# DNS over TLS. Not intercepted by a DNS proxy extension, so this is how a
+# resolver's reachability can actually be tested on such a host.
+DOT_PORT = 853
+DOT_QUERY_TIMEOUT = 6
+
+# The internet check needs one TCP handshake with a host on the internet; it
+# does not need DNS. It used port 53, which made it unable to fail on an
+# intercepted host. Port 443 is not intercepted (measured: documentation
+# addresses time out, real hosts connect).
+INTERNET_CHECK_PORT = 443
+INTERNET_CHECK_TIMEOUT = 3
+INTERNET_CHECK_HOSTS = [
+    "1.1.1.1",      # Cloudflare
+    "8.8.8.8",      # Google
+    "9.9.9.9",      # Quad9
+]
+
+# Unprivileged ICMP (SOCK_DGRAM with IPPROTO_ICMP) works without root on macOS.
+# Used only as a weaker, clearly-labelled signal where no DNS signal is
+# trustworthy. Note G-root and L-root do not answer ICMP at all, so a
+# non-response is never reported as "down".
+ICMP_PROBE_TIMEOUT = 3
+ICMP_PROBE_ATTEMPTS = 2
+
 # Common websites for connectivity testing
 CONNECTIVITY_TEST_SITES = [
     "https://www.google.com",
