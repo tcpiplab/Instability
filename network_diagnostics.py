@@ -27,7 +27,9 @@ from network_tools import check_external_ip_main, get_public_ip, web_check_main,
 from utils import create_success_result, create_error_result, wrap_legacy_result, standardize_tool_output
 
 # Import centralized configuration
-from config import get_dns_servers, DNS_TEST_SERVERS, COMMON_PORTS
+from config import (get_dns_servers, DNS_TEST_SERVERS, COMMON_PORTS,
+                    INTERNET_CHECK_HOSTS, INTERNET_CHECK_PORT,
+                    INTERNET_CHECK_TIMEOUT)
 
 # Import v3 pentest tools
 try:
@@ -608,13 +610,34 @@ def _get_all_interfaces_mac(system: str) -> Dict[str, str]:
 
 @standardize_tool_output()
 def check_internet_connection() -> str:
-    """Check if the internet is reachable"""
-    try:
-        # Try to connect to a reliable server
-        socket.create_connection((DNS_TEST_SERVERS[0], 53), timeout=3)
-        return "Connected"
-    except Exception:
-        return "Disconnected"
+    """Check if the internet is reachable.
+
+    Opens a TCP connection to a well-known host and reports whether it
+    succeeded. Tries several hosts before concluding the internet is down, so
+    one provider having a bad day is not read as an outage.
+
+    This used to connect on port 53, which made it unable to fail. A macOS DNS
+    proxy network extension captures port 53 for every destination, so the
+    connection always succeeded locally and the tool reported "Connected" with
+    the WAN unplugged. Port 443 is not intercepted: measured 2026-08-29,
+    documentation-range addresses time out on 443 while real hosts connect in
+    milliseconds. Nothing about this check needs DNS -- it needs one handshake
+    with something on the internet -- so the port was incidental all along.
+    See docs/dns_interception_srd.md section 5.3.
+
+    Returns:
+        str: "Connected" if any host accepted a connection, otherwise
+            "Disconnected".
+    """
+    for host in INTERNET_CHECK_HOSTS:
+        try:
+            connection = socket.create_connection(
+                (host, INTERNET_CHECK_PORT), timeout=INTERNET_CHECK_TIMEOUT)
+            connection.close()
+            return "Connected"
+        except OSError:
+            continue
+    return "Disconnected"
 
 
 @standardize_tool_output()
