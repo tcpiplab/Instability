@@ -32,6 +32,12 @@ DEFAULT_WEBSITES: List[str] = [
     "https://www.netflix.com",
     "https://www.bbc.com",
     "https://www.nytimes.com",
+    # Infrastructure rather than destinations. These two fail in ways the
+    # consumer sites above do not: a developer notices GitHub being unreachable
+    # immediately, and Cloudflare sits in front of a large share of the web, so
+    # it failing while the sites above still answer is itself informative.
+    "https://github.com",
+    "https://www.cloudflare.com",
     # Government websites
     "https://www.usa.gov",           # US
     "https://www.canada.ca",         # Canada
