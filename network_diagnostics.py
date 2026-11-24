@@ -8,6 +8,7 @@ implementations for essential tools to ensure the chatbot can function
 even in offline situations.
 """
 
+import concurrent.futures
 import os
 import sys
 import socket
@@ -1318,7 +1319,15 @@ def check_local_network() -> str:
 
 
 # WHOIS servers and their IP addresses with descriptions
-# Comprehensive list covering global IP allocation and domain registries
+# Covers global IP allocation and domain registries. The IP addresses are
+# informational: the check connects by name.
+#
+# Six servers were removed on 2026-11-23 because their names no longer have
+# an address in DNS: whois.nic.mobi, whois.nic.google, whois.nic.co,
+# whois.nic.info, whois.nic.pro and whois.registry.in. A retired server is
+# reported unreachable on every run, and a standing failure hides a real one.
+# Registries of generic top-level domains have not been required to run port
+# 43 WHOIS since January 2025, so expect more of this list to retire.
 WHOIS_SERVERS_DICT = {
     "whois.apnic.net": (
     "APNIC WHOIS server for IP address and AS number allocation in the Asia-Pacific region", "202.12.29.140"),
@@ -1332,24 +1341,18 @@ WHOIS_SERVERS_DICT = {
     "EDUCAUSE WHOIS server for dot EDU domain name registrations in United States", "192.52.178.30"),
     "whois.iana.org": ("IANA WHOIS server for the root zone database and overall global IP address allocations to regional registries like ARIN and RIPE", "192.0.32.59"),
     "riswhois.ripe.net": ("RIPE RIS WHOIS server for BGP routing information and analysis", "193.0.19.33"),
-    "whois.nic.mobi": ("Registry WHOIS server for dot MOBI top-level domain registrations", "194.169.218.57"),
     "whois.verisign-grs.com": ("Verisign Global Registry WHOIS server for looking up dot COM and dot NET domains", "199.7.59.74"),
-    "whois.nic.google": ("Google Registry WHOIS server for Google-operated TLD registrations", "216.239.32.10"),
     "whois.nic.io": ("Internet Computer Bureau WHOIS server for .io domain registrations", "193.223.78.42"),
-    "whois.nic.co": (".CO Internet S.A.S. WHOIS server for .co domain registrations", "156.154.100.224"),
     "whois.nic.xyz": ("XYZ.COM LLC WHOIS server for .xyz domain registrations", "185.24.64.96"),
     "whois.nic.club": (".CLUB Domains, LLC WHOIS server for .club domain registrations", "108.59.160.175"),
-    "whois.nic.info": ("Afilias WHOIS server for .info domain registrations", "199.19.56.1"),
     "whois.nic.biz": ("Neustar WHOIS server for .biz domain registrations", "156.154.100.224"),
     "whois.nic.us": ("NeuStar, Inc. WHOIS server for .us domain registrations", "156.154.100.224"),
     "whois.nic.tv": ("Verisign WHOIS server for .tv domain registrations", "192.42.93.30"),
     "whois.nic.asia": ("DotAsia WHOIS server for .asia domain registrations", "203.119.86.101"),
     "whois.nic.me": ("doMEn WHOIS server for .me domain registrations", "185.24.64.96"),
-    "whois.nic.pro": ("RegistryPro WHOIS server for .pro domain registrations", "199.7.59.74"),
     "whois.nic.museum": ("Museum Domain Management Association WHOIS server for .museum domain registrations", "130.242.24.5"),
     "whois.nic.ai": ("Government of Anguilla WHOIS server for .ai domain registrations", "209.59.119.34"),
     "whois.nic.de": ("DENIC eG WHOIS server for .de domain registrations", "81.91.164.5"),
-    "whois.registry.in": ("National Internet Exchange of India WHOIS server for .in domain registrations for India", "103.132.247.21"),
     "whois.jprs.jp": ("Japan Registry Services Co., Ltd. WHOIS server for .jp domain registrations for Japan", "117.104.133.169"),
     "whois.nic.fr": ("AFNIC WHOIS server for .fr domain registrations for France", "192.134.5.73"),
     "whois.registro.br": ("Comitê Gestor da Internet no Brasil WHOIS server for .br domain registrations for Brazil", "200.160.2.3"),
@@ -1361,98 +1364,115 @@ WHOIS_SERVERS_DICT = {
 }
 
 
-def run_whois_command(whois_server_name: str, whois_server_ip: str) -> tuple:
-    """Run the whois command for a specific server and IP.
-    
+# The servers are tested concurrently, so the whole check takes about two
+# connection timeouts plus the retry delay in the worst case, which is 11
+# seconds. Tested one after another with a 10-second timeout, 35 servers took
+# 35.7 seconds on a good day and could not finish on a bad one. The worker
+# count must stay at or above the number of servers for that bound to hold,
+# and a test asserts it.
+WHOIS_PORT = 43
+WHOIS_CONNECT_TIMEOUT_SECONDS = 5
+WHOIS_RETRY_DELAY_SECONDS = 1
+WHOIS_MAX_WORKERS = 32
+
+
+def check_whois_server(whois_server_name: str,
+                       timeout: float = WHOIS_CONNECT_TIMEOUT_SECONDS) -> Optional[str]:
+    """Open a TCP connection to one WHOIS server on port 43.
+
     Args:
         whois_server_name: The hostname of the WHOIS server
-        whois_server_ip: The IP address of the WHOIS server
-        
+        timeout: Seconds to wait for the connection
+
     Returns:
-        Tuple of (status, error) where status is "reachable" or "unreachable"
+        None if the connection opened, otherwise a short fixed description of
+        why it did not. The description never contains text from the remote
+        server or from the operating system's error message.
     """
     try:
-        if platform.system().lower() in ["darwin", "linux"]:
-            # Use socket connection test instead of actual whois command for speed
-            socket.create_connection((whois_server_name, 43), timeout=10)
-            return "reachable", None
-        elif platform.system().lower() == "windows":
-            # Use socket connection test for Windows too for consistency
-            socket.create_connection((whois_server_name, 43), timeout=10)
-            return "reachable", None
-    except Exception as e:
-        return "unreachable", str(e)
+        with socket.create_connection((whois_server_name, WHOIS_PORT), timeout=timeout):
+            return None
+    except socket.gaierror:
+        return "name did not resolve"
+    except socket.timeout:
+        return "timed out"
+    except ConnectionRefusedError:
+        return "connection refused"
+    except OSError:
+        return "connection failed"
+
+
+def check_whois_server_list(server_names: List[str]) -> Dict[str, Optional[str]]:
+    """Test several WHOIS servers at the same time.
+
+    Args:
+        server_names: Hostnames of the WHOIS servers to test
+
+    Returns:
+        A dictionary in the order of server_names, mapping each hostname to
+        None if it was reachable or to a short description of the failure.
+    """
+    if not server_names:
+        return {}
+    workers = min(WHOIS_MAX_WORKERS, len(server_names))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        errors = list(pool.map(check_whois_server, server_names))
+    return dict(zip(server_names, errors))
+
+
+def format_whois_report(results: Dict[str, Optional[str]]) -> str:
+    """Build the plain-text report of a WHOIS server check.
+
+    Other programs parse this report, so its headings and line shapes are
+    fixed, and it is never shortened or truncated. It lists the reachable
+    servers first and the unreachable ones last, so cutting it short would
+    remove the failures and leave the report looking like an all-clear.
+
+    Args:
+        results: Mapping of hostname to None or a failure description
+
+    Returns:
+        The report text
+    """
+    reachable = [name for name, error in results.items() if error is None]
+    unreachable = [(name, error) for name, error in results.items() if error is not None]
+
+    lines = [f"Checked {len(results)} WHOIS servers on port {WHOIS_PORT}.", ""]
+    lines.append(f"Reachable WHOIS Servers ({len(reachable)}):")
+    lines.extend(f"- {name}" for name in reachable)
+    lines.append("")
+    if unreachable:
+        lines.append(f"Unreachable WHOIS Servers ({len(unreachable)}):")
+        lines.extend(f"- {name}: {error}" for name, error in unreachable)
+    else:
+        lines.append("All WHOIS servers were reachable.")
+    return "\n".join(lines)
 
 
 @standardize_tool_output()
 def check_whois_servers() -> str:
-    """Check if WHOIS servers are reachable (comprehensive global server list)"""
-    from utils import ollama_shorten_output
-    
-    reachable_servers = []
-    unreachable_servers = []
-    whois_results = ""
+    """Check if WHOIS servers are reachable (comprehensive global server list)
 
+    Opens a TCP connection to port 43 of every server in WHOIS_SERVERS_DICT,
+    all at the same time, and retries the failures once after a short delay.
+
+    Returns:
+        The report built by format_whois_report. The report is returned whole.
+        It used to be passed through a language model to shorten it, which let
+        a model rewrite the counts and names that the check had measured.
+    """
     print(f"{Fore.CYAN}Starting WHOIS server monitoring at {time.ctime()}{Style.RESET_ALL}")
-    whois_results += f"Starting WHOIS server monitoring at {time.ctime()}\n"
-    
-    # Count servers being checked
-    num_servers = len(WHOIS_SERVERS_DICT)
-    whois_results += f"Checking reachability of {num_servers} WHOIS servers worldwide...\n\n"
 
-    # First round of checks
-    for whois_server_name, (whois_server_description, ip) in WHOIS_SERVERS_DICT.items():
-        status, error = run_whois_command(whois_server_name, ip)
-        if status == "reachable":
-            reachable_servers.append((whois_server_name, whois_server_description))
-            whois_results += f"{whois_server_name} was reachable. It is the {whois_server_description}.\n"
-        else:
-            unreachable_servers.append((whois_server_name, error, whois_server_description))
-            whois_results += f"{whois_server_name} was unreachable. The error was: {error}. It is the {whois_server_description}.\n"
+    results = check_whois_server_list(list(WHOIS_SERVERS_DICT))
 
-    # Retry unreachable servers after a delay
-    if unreachable_servers:
-        whois_results += "\nRetrying unreachable servers...\n"
-        time.sleep(2)  # Wait 2 seconds before retrying (reduced from 5)
+    failed_names = [name for name, error in results.items() if error is not None]
+    if failed_names:
+        print(f"{Fore.YELLOW}Retrying {len(failed_names)} unreachable WHOIS servers..."
+              f"{Style.RESET_ALL}")
+        time.sleep(WHOIS_RETRY_DELAY_SECONDS)
+        results.update(check_whois_server_list(failed_names))
 
-        remaining_unreachable = []
-        for whois_server_name, error, whois_server_description in unreachable_servers:
-            # Get IP from the original dict for retry
-            ip = WHOIS_SERVERS_DICT[whois_server_name][1]
-            status, retry_error = run_whois_command(whois_server_name, ip)
-            if status == "reachable":
-                reachable_servers.append((whois_server_name, whois_server_description))
-                whois_results += f"After retrying, {whois_server_name} was reachable.\n"
-            else:
-                remaining_unreachable.append((whois_server_name, retry_error, whois_server_description))
-                whois_results += f"After retrying, {whois_server_name} was still unreachable. The error was: {retry_error}.\n"
-
-        unreachable_servers = remaining_unreachable
-
-    # Summary section
-    whois_results += f"\nReachable WHOIS Servers ({len(reachable_servers)}):\n"
-    for whois_server_name, _ in reachable_servers:
-        whois_results += f"- {whois_server_name}\n"
-
-    if len(unreachable_servers) == 0:
-        whois_results += "\nAll WHOIS servers were reachable.\n"
-    else:
-        whois_results += f"\nUnreachable WHOIS Servers ({len(unreachable_servers)}):\n"
-        for whois_server_name, error, _ in unreachable_servers:
-            whois_results += f"- {whois_server_name}: Unreachable\n"
-
-    # Apply Ollama shortening to reduce verbosity
-    try:
-        shortened_results = ollama_shorten_output(whois_results, max_lines=20, max_chars=1500)
-        return shortened_results
-    except Exception as e:
-        print(f"{Fore.YELLOW}Warning: Could not shorten WHOIS results: {e}{Style.RESET_ALL}")
-        # Fallback to simple truncation if Ollama fails
-        lines = whois_results.split('\n')
-        if len(lines) > 25:
-            truncated = '\n'.join(lines[:25]) + f"\n\n[Output truncated - showed first 25 lines of {len(lines)} total lines]"
-            return truncated
-        return whois_results
+    return format_whois_report(results)
 
 
 def is_private_ip(ip: str) -> bool:

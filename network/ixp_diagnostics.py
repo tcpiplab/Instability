@@ -1,45 +1,101 @@
 """
 Internet Exchange Point Monitoring Module
 
-Comprehensive IXP connectivity monitoring for major global internet exchange points.
-Tests HTTP/HTTPS connectivity to assess network infrastructure and routing characteristics.
+Checks whether the public website of each major internet exchange point answers
+an HTTPS request. A reply shows that the exchange's website is reachable from
+this host. It says nothing about traffic crossing the exchange itself, and the
+report words the result that way.
 Part of the instability.py v3 network diagnostics suite.
 """
 
-import requests
+import concurrent.futures
 import time
-import urllib3
 from datetime import datetime
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
+import requests
+import urllib3
 from colorama import Fore
 
 # Import standardized tool result functions
-from utils import create_success_result, create_error_result
+from utils import create_success_result
+
+TOOL_NAME = "monitor_ixp_connectivity"
 
 # Major internet exchange points to monitor
 IXP_ENDPOINTS: Dict[str, str] = {
     "DE-CIX Frankfurt": "https://www.de-cix.net/",
-    "LINX London": "https://www.linx.net/", 
+    "LINX London": "https://www.linx.net/",
     "AMS-IX Amsterdam": "https://www.ams-ix.net/",
     "NYIIX New York": "https://www.nyiix.net/",
     "HKIX Hong Kong": "https://www.hkix.net/",
     "Equinix Global": "https://status.equinix.com/"
 }
 
+# The sites are tested concurrently, so the whole check takes about as long as
+# the slowest site: at most (timeout + backoff) * (retries + 1). The defaults
+# keep that near 21 seconds. They were 15 seconds and three retries, tested one
+# site after another, which let a single dead site hold the check for over a
+# minute.
+DEFAULT_TIMEOUT_SECONDS = 10
+DEFAULT_RETRIES = 1
+
+# An HTTP status below this means a web server received the request and
+# answered it, which is the question this check asks. The Equinix status page
+# answers 403 to non-browser clients on every request (measured 2026-11-23), and
+# counting that as unreachable reported a standing failure that was not an
+# outage. A 5xx status is still a failure, and is retried.
+ANSWERED_BELOW_STATUS = 500
+
+
+def _build_session(
+    user_agent: Optional[str],
+    insecure: bool,
+    burp: bool
+) -> requests.Session:
+    """
+    Build the HTTP session used to test one IXP website.
+
+    Args:
+        user_agent: Custom User-Agent header, or None for the tool's own
+        insecure: Disable SSL certificate verification
+        burp: Route through Burp Suite proxy
+
+    Returns:
+        A configured requests session
+    """
+    session = requests.Session()
+    session.headers.update({"User-Agent": user_agent or "InstabilityIXP/1.0"})
+
+    if insecure:
+        session.verify = False
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+    if burp:
+        session.proxies = {
+            "http": "http://localhost:8080",
+            "https": "http://localhost:8080"
+        }
+    return session
+
 
 def _test_ixp_connectivity(
-    name: str, 
-    url: str, 
-    timeout: int = 15,
-    retries: int = 3,
+    name: str,
+    url: str,
+    timeout: int = DEFAULT_TIMEOUT_SECONDS,
+    retries: int = DEFAULT_RETRIES,
     user_agent: Optional[str] = None,
     insecure: bool = False,
-    burp: bool = False,
-    silent: bool = False
+    burp: bool = False
 ) -> Tuple[bool, Dict[str, Any]]:
     """
-    Test HTTP connectivity to a specific IXP endpoint with retry logic.
-    
+    Test HTTP connectivity to a specific IXP website with retry logic.
+
+    Any HTTP status below 500 counts as an answer and is never retried. A
+    connection failure, a timeout or a 5xx status is retried with exponential
+    backoff. This function prints nothing, because it runs on a worker thread
+    and concurrent prints would interleave.
+
     Args:
         name: IXP name for display
         url: IXP URL to test
@@ -48,182 +104,210 @@ def _test_ixp_connectivity(
         user_agent: Custom User-Agent header
         insecure: Disable SSL certificate verification
         burp: Route through Burp Suite proxy
-        silent: Suppress console output
-        
+
     Returns:
-        Tuple of (success, result_dict)
+        Tuple of (answered, result_dict). The "error" field of result_dict is a
+        short fixed category. The exception text, which can be long and names
+        hosts, is kept apart in "error_detail".
     """
-    result = {
+    result: Dict[str, Any] = {
         "name": name,
         "url": url,
         "response_time": None,
         "status_code": None,
         "error": None,
+        "error_detail": None,
         "retry_attempts": 0
     }
-    
-    # Configure session
-    session = requests.Session()
-    
-    # Set User-Agent
-    if user_agent:
-        session.headers.update({"User-Agent": user_agent})
-    else:
-        session.headers.update({"User-Agent": "InstabilityIXP/1.0"})
-    
-    # Configure SSL verification
-    if insecure:
-        session.verify = False
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-    
-    # Configure Burp proxy
-    if burp:
-        session.proxies = {
-            "http": "http://localhost:8080",
-            "https": "http://localhost:8080"
-        }
-    
-    # Retry logic with exponential backoff
+
+    session = _build_session(user_agent, insecure, burp)
+
     for attempt in range(retries + 1):
         result["retry_attempts"] = attempt
-        
-        if not silent and attempt > 0:
-            backoff = 2 ** (attempt - 1)
-            print(f"{Fore.YELLOW}  Retry {attempt}/{retries} for {name} (backoff: {backoff}s){Fore.RESET}")
-            time.sleep(backoff)
-        
+        if attempt > 0:
+            time.sleep(2 ** (attempt - 1))
+
         try:
             start_time = time.time()
             response = session.get(url, timeout=timeout)
             end_time = time.time()
-            
-            result["response_time"] = round((end_time - start_time) * 1000, 2)
-            result["status_code"] = response.status_code
-            
-            if response.status_code == 200:
-                return True, result
-            else:
-                result["error"] = f"HTTP {response.status_code}"
-                if not silent:
-                    print(f"{Fore.RED}  HTTP {response.status_code} for {name}{Fore.RESET}")
-        
-        except requests.exceptions.Timeout:
+        except requests.exceptions.Timeout as e:
             result["error"] = "Connection timeout"
-            if not silent:
-                print(f"{Fore.YELLOW}  Timeout for {name} (attempt {attempt + 1}){Fore.RESET}")
-        
-        except requests.exceptions.ConnectionError as e:
-            result["error"] = f"Connection failed: {str(e)}"
-            if not silent:
-                print(f"{Fore.RED}  Connection failed for {name}: {str(e)}{Fore.RESET}")
-        
+            result["error_detail"] = str(e)
+            continue
         except requests.exceptions.SSLError as e:
-            result["error"] = f"SSL certificate error: {str(e)}"
-            if not silent:
-                print(f"{Fore.RED}  SSL error for {name}: {str(e)}{Fore.RESET}")
-        
+            # SSLError and ProxyError are subclasses of ConnectionError, so
+            # they must be caught before it.
+            result["error"] = "TLS certificate error"
+            result["error_detail"] = str(e)
+            continue
         except requests.exceptions.ProxyError as e:
-            result["error"] = f"Proxy connection failed: {str(e)}"
-            if not silent:
-                print(f"{Fore.RED}  Proxy error for {name}: {str(e)}{Fore.RESET}")
-        
-        except Exception as e:
-            result["error"] = f"Unexpected error: {str(e)}"
-            if not silent:
-                print(f"{Fore.RED}  Error for {name}: {str(e)}{Fore.RESET}")
-    
+            result["error"] = "Proxy connection failed"
+            result["error_detail"] = str(e)
+            continue
+        except requests.exceptions.ConnectionError as e:
+            result["error"] = "Connection failed"
+            result["error_detail"] = str(e)
+            continue
+        except requests.exceptions.RequestException as e:
+            result["error"] = "Request failed"
+            result["error_detail"] = str(e)
+            continue
+
+        result["response_time"] = round((end_time - start_time) * 1000, 2)
+        result["status_code"] = response.status_code
+        if response.status_code < ANSWERED_BELOW_STATUS:
+            result["error"] = None
+            result["error_detail"] = None
+            return True, result
+        result["error"] = f"HTTP {response.status_code}"
+
     return False, result
+
+
+def format_ixp_report(
+    reachable_ixps: List[Dict[str, Any]],
+    unreachable_ixps: List[Dict[str, Any]]
+) -> str:
+    """
+    Build the plain-text report of an IXP website check.
+
+    The report is the tool's returned value in manual mode. Other programs
+    parse it, so its headings and line shapes are fixed, it carries no colour
+    codes, and it is never shortened or truncated.
+
+    Args:
+        reachable_ixps: Result dictionaries of the sites that answered
+        unreachable_ixps: Result dictionaries of the sites that did not
+
+    Returns:
+        The report text
+    """
+    total = len(reachable_ixps) + len(unreachable_ixps)
+    lines = [
+        "This check requests the public website of each internet exchange "
+        "point. It does not test traffic crossing the exchange.",
+        "",
+        f"IXP websites answering: {len(reachable_ixps)}/{total}",
+    ]
+
+    if reachable_ixps:
+        lines.append("")
+        lines.append(f"IXP Websites That Answered ({len(reachable_ixps)}):")
+        for ixp in reachable_ixps:
+            lines.append(f"- {ixp['name']} (HTTP {ixp['status_code']}, "
+                         f"{ixp['response_time']:.0f} ms)")
+
+    if unreachable_ixps:
+        lines.append("")
+        lines.append(f"IXP Websites That Did Not Answer ({len(unreachable_ixps)}):")
+        for ixp in unreachable_ixps:
+            lines.append(f"- {ixp['name']}: {ixp['error']}")
+    else:
+        lines.append("")
+        lines.append("All IXP websites answered.")
+
+    return "\n".join(lines)
+
+
+def _overall_status(successful: int, total_tested: int) -> str:
+    """
+    Grade the check from the share of sites that answered.
+
+    Args:
+        successful: Number of sites that answered
+        total_tested: Number of sites tested
+
+    Returns:
+        "success", "partial" or "error"
+    """
+    if successful >= total_tested * 0.8:
+        return "success"
+    if successful >= total_tested * 0.5:
+        return "partial"
+    return "error"
 
 
 def monitor_ixp_connectivity(
     silent: bool = False,
-    timeout: int = 15,
-    retries: int = 3,
+    timeout: int = DEFAULT_TIMEOUT_SECONDS,
+    retries: int = DEFAULT_RETRIES,
     user_agent: Optional[str] = None,
     insecure: bool = False,
     burp: bool = False
 ) -> Dict[str, Any]:
     """
-    Monitor connectivity to major internet exchange points worldwide.
-    
-    Tests HTTP/HTTPS connectivity to major global IXPs to assess network
-    infrastructure health and routing characteristics for penetration testing
-    and network reconnaissance activities.
-    
+    Check that the websites of major internet exchange points answer.
+
+    Requests the public website of each exchange over HTTPS, all at the same
+    time. A site answered if it returned any HTTP status below 500. The result
+    is a weak signal of how well distant regions can be reached from this host.
+    It is not a test of the exchanges themselves.
+
     Args:
         silent: Suppress verbose console output
         timeout: Connection timeout in seconds
-        retries: Number of retry attempts for failed connections  
+        retries: Number of retry attempts for failed connections
         user_agent: Custom User-Agent header for HTTP requests
         insecure: Disable SSL certificate verification
         burp: Route traffic through Burp Suite proxy
-        
+
     Returns:
-        Dictionary containing connectivity results and summary statistics
+        A standardized tool result. "success" is True whenever the check ran,
+        including when no site answered, because the finding is in the data.
+        "stdout" holds the plain-text report, and "parsed_data" holds
+        "status", "reachable_ixps", "unreachable_ixps" and "summary". Those
+        four are also present at the top level, where earlier versions of this
+        tool returned them.
     """
+    started = datetime.now()
+
     if not silent:
-        print(f"{Fore.CYAN}Internet Exchange Point Connectivity Assessment{Fore.RESET}")
-        print(f"{Fore.CYAN}Testing connectivity to {len(IXP_ENDPOINTS)} major IXPs worldwide...{Fore.RESET}\n")
-        
+        print(f"{Fore.CYAN}Internet Exchange Point Website Check{Fore.RESET}")
+        print(f"{Fore.CYAN}Requesting the websites of {len(IXP_ENDPOINTS)} major IXPs..."
+              f"{Fore.RESET}\n")
+
         if insecure:
             print(f"{Fore.YELLOW}Warning: SSL certificate verification disabled{Fore.RESET}")
         if burp:
-            print(f"{Fore.YELLOW}Info: Routing traffic through Burp Suite proxy (localhost:8080){Fore.RESET}")
-    
-    reachable_ixps = []
-    unreachable_ixps = []
-    
-    # Test each IXP
-    for name, url in IXP_ENDPOINTS.items():
-        if not silent:
-            print(f"{Fore.YELLOW}Testing {name} ({url})...{Fore.RESET}")
-        
-        success, result = _test_ixp_connectivity(
-            name=name,
-            url=url,
+            print(f"{Fore.YELLOW}Info: Routing traffic through Burp Suite proxy "
+                  f"(localhost:8080){Fore.RESET}")
+
+    def test_one(item: Tuple[str, str]) -> Tuple[bool, Dict[str, Any]]:
+        return _test_ixp_connectivity(
+            name=item[0],
+            url=item[1],
             timeout=timeout,
             retries=retries,
             user_agent=user_agent,
             insecure=insecure,
-            burp=burp,
-            silent=silent
+            burp=burp
         )
-        
-        if success:
-            reachable_ixps.append(result)
-            if not silent:
-                print(f"{Fore.GREEN}[OK] {name}: {result['response_time']}ms (HTTP {result['status_code']}){Fore.RESET}")
-        else:
-            unreachable_ixps.append(result)
-            if not silent:
-                status = "[TIMEOUT]" if "timeout" in result["error"].lower() else "[FAIL]"
-                color = Fore.YELLOW if "timeout" in result["error"].lower() else Fore.RED
-                print(f"{color}{status} {name}: {result['error']}{Fore.RESET}")
-    
-    # Calculate summary statistics
+
+    # map() returns results in the order of IXP_ENDPOINTS, whichever site
+    # finishes first, so the report lists the sites in a stable order.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(IXP_ENDPOINTS)) as pool:
+        outcomes = list(pool.map(test_one, IXP_ENDPOINTS.items()))
+
+    reachable_ixps = [result for answered, result in outcomes if answered]
+    unreachable_ixps = [result for answered, result in outcomes if not answered]
+
+    if not silent:
+        for answered, result in outcomes:
+            if answered:
+                print(f"{Fore.GREEN}[OK] {result['name']}: {result['response_time']}ms "
+                      f"(HTTP {result['status_code']}){Fore.RESET}")
+            else:
+                print(f"{Fore.RED}[FAIL] {result['name']}: {result['error']} "
+                      f"(after {result['retry_attempts']} retries){Fore.RESET}")
+
     total_tested = len(IXP_ENDPOINTS)
     successful = len(reachable_ixps)
     failed = len(unreachable_ixps)
     success_rate = round((successful / total_tested) * 100, 1) if total_tested > 0 else 0.0
-    
-    # Determine overall status
-    if successful == total_tested:
-        status = "success"
-        status_msg = f"{Fore.GREEN}[EXCELLENT] All IXPs are reachable{Fore.RESET}"
-    elif successful >= total_tested * 0.8:
-        status = "success"
-        status_msg = f"{Fore.GREEN}[GOOD] Most IXPs are reachable{Fore.RESET}"
-    elif successful >= total_tested * 0.5:
-        status = "partial"
-        status_msg = f"{Fore.YELLOW}[PARTIAL] Some IXP connectivity issues detected{Fore.RESET}"
-    else:
-        status = "error"
-        status_msg = f"{Fore.RED}[POOR] Significant IXP connectivity problems{Fore.RESET}"
-    
-    # Build result dictionary
-    result = {
-        "status": status,
-        "timestamp": datetime.now().isoformat(),
+
+    data = {
+        "status": _overall_status(successful, total_tested),
         "reachable_ixps": reachable_ixps,
         "unreachable_ixps": unreachable_ixps,
         "summary": {
@@ -233,28 +317,17 @@ def monitor_ixp_connectivity(
             "success_rate": success_rate
         }
     }
-    
-    # Display summary
-    if not silent:
-        print(f"\n{Fore.CYAN}IXP Connectivity Summary:{Fore.RESET}")
-        print(f"Total IXPs tested: {total_tested}")
-        print(f"Successful connections: {successful}/{total_tested}")
-        print(f"Failed connections: {failed}/{total_tested}")
-        print(f"Success rate: {success_rate}%")
-        print(f"\nOverall status: {status_msg}")
-        
-        if reachable_ixps:
-            print(f"\n{Fore.GREEN}Reachable IXPs:{Fore.RESET}")
-            for ixp in reachable_ixps:
-                print(f"  [OK] {ixp['name']} - {ixp['response_time']}ms")
-        
-        if unreachable_ixps:
-            print(f"\n{Fore.RED}Unreachable IXPs:{Fore.RESET}")
-            for ixp in unreachable_ixps:
-                status_text = "[TIMEOUT]" if "timeout" in ixp["error"].lower() else "[FAIL]"
-                print(f"  {status_text} {ixp['name']} - {ixp['error']} (after {ixp['retry_attempts']} retries)")
-    
-    return result
+
+    return create_success_result(
+        tool_name=TOOL_NAME,
+        execution_time=(datetime.now() - started).total_seconds(),
+        parsed_data=data,
+        command_executed="HTTPS GET of each IXP website",
+        stdout=format_ixp_report(reachable_ixps, unreachable_ixps),
+        options_used={"timeout": timeout, "retries": retries, "insecure": insecure,
+                      "burp": burp},
+        **data
+    )
 
 
 def get_module_tools():
@@ -271,7 +344,7 @@ def get_module_tools():
             name="monitor_ixp_connectivity",
             function_name="monitor_ixp_connectivity",
             module_path="network.ixp_diagnostics",
-            description="Monitor connectivity to major internet exchange points worldwide",
+            description="Check that the websites of major internet exchange points answer",
             category=ToolCategory.NETWORK_DIAGNOSTICS,
             parameters={
                 "silent": ParameterInfo(
@@ -281,12 +354,12 @@ def get_module_tools():
                 ),
                 "timeout": ParameterInfo(
                     ParameterType.INTEGER,
-                    default=15,
+                    default=DEFAULT_TIMEOUT_SECONDS,
                     description="Connection timeout in seconds"
                 ),
                 "retries": ParameterInfo(
                     ParameterType.INTEGER,
-                    default=3,
+                    default=DEFAULT_RETRIES,
                     description="Number of retry attempts for failed connections"
                 ),
                 "user_agent": ParameterInfo(
