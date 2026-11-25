@@ -34,6 +34,13 @@ RETIRED_WHOIS_SERVERS = (
     "whois.nic.pro", "whois.registry.in",
 )
 
+# The five regional internet registries. Removing the retired servers must not
+# take any of these with them.
+REGIONAL_REGISTRY_WHOIS_SERVERS = (
+    "whois.arin.net", "whois.ripe.net", "whois.apnic.net", "whois.lacnic.net",
+    "whois.afrinic.net",
+)
+
 
 def check(condition, label):
     if condition:
@@ -195,8 +202,11 @@ def test_retired_whois_servers_are_gone():
     for name in RETIRED_WHOIS_SERVERS:
         check(name not in network_diagnostics.WHOIS_SERVERS_DICT,
               f"{name} is no longer checked")
-    check("whois.arin.net" in network_diagnostics.WHOIS_SERVERS_DICT,
-          "the regional registries are still checked")
+    # A lookup by exact key. Written with get() and not "in", because CodeQL
+    # reads a hostname literal on the left of "in" as a substring test of a URL.
+    for name in REGIONAL_REGISTRY_WHOIS_SERVERS:
+        check(network_diagnostics.WHOIS_SERVERS_DICT.get(name) is not None,
+              f"{name} is still checked")
     check(network_diagnostics.WHOIS_MAX_WORKERS
           >= len(network_diagnostics.WHOIS_SERVERS_DICT),
           "every server has its own worker, so one timeout bounds the round")
